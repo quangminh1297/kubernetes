@@ -343,6 +343,7 @@ func (lb *LoadBalancerRR) OnEndpointsAdd(endpoints *v1.Endpoints) {
 					state.otherEndpoints[nodenames[j]].endpoints = nil
 				}
 			}
+			asdfsafsadf
 			for i := range newEndpoints {
 
 				if nodenames[i] == hostname {
