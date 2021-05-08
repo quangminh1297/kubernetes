@@ -96,7 +96,7 @@ func TryConnectEndpoints_V2(service proxy.ServicePortName, srcAddr net.Addr, pro
 	for _, dialTimeout := range EndpointDialTimeouts {
 		endpoint, err := loadBalancer.NextEndpoint_V2(service, srcAddr, sessionAffinityReset)
 		if err != nil {
-			//klog.Errorf("Couldn't find an endpoint for %s: %v", service, err)
+			klog.Errorf("Couldn't find an endpoint for %s: %v", service, err)
 			return nil, err
 		}
 		klog.V(0).Infof("Mapped service %q to endpoint %s", service, endpoint)
@@ -141,11 +141,11 @@ func (tcp *tcpProxySocket) ProxyLoop_V2(service proxy.ServicePortName, myInfo *S
 			klog.Errorf("Accept failed: %v", err)
 			continue
 		}
-		//klog.V(0).Infof("Accepted TCP connection from %v to %v", inConn.RemoteAddr(), inConn.LocalAddr())
+		klog.V(0).Infof("Accepted TCP connection from %v to %v", inConn.RemoteAddr(), inConn.LocalAddr())
 		outConn, err := TryConnectEndpoints_V2(service, inConn.(*net.TCPConn).RemoteAddr(), "tcp", loadBalancer)
 
 		if err != nil {
-			//klog.Errorf("Failed to connect to balancer: %v", err)
+			klog.Errorf("Failed to connect to balancer: %v", err)
 			inConn.Close()
 			continue
 		}

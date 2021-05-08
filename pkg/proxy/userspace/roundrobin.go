@@ -29,6 +29,7 @@ import (
 	"k8s.io/kubernetes/pkg/util/slice"
 	"net"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 )
@@ -38,7 +39,7 @@ var (
 	ErrMissingEndpoints    = errors.New("missing endpoints")
 )
 
-var alert_tmp string
+var tmp_metric_filter string
 
 type affinityState struct {
 	clientIP string
@@ -212,66 +213,71 @@ func (lb *LoadBalancerRR) ServiceHasEndpoints(svcPort proxy.ServicePortName) boo
 func (lb *LoadBalancerRR) NextEndpoint_V2(svcPort proxy.ServicePortName, srcAddr net.Addr, sessionAffinityReset bool) (string, error) {
 	// Coarse locking is simple.  We can get more fine-grained if/when we
 	// can prove it matters.
-
+	//tmp_metric := "metrics-server"
 	lb.lock.Lock()
 	defer lb.lock.Unlock()
-	state, exists := lb.services[svcPort]
+	//tmp_metric_filter = "metrics-server"
+	//if strings.Contains(svcPort.Name, tmp_metric_filter)
+		state, exists := lb.services[svcPort]
+		klog.V(0).Infof("<<< LEN Endpoint: ", len(state.endpoints))
+		klog.V(0).Infof("<<< LEN Endpoint & Info: ", svcPort.Namespace)
+		klog.V(0).Infof("<<< LEN Endpoint & Info: ", svcPort.Name)
 
-	if !exists || state == nil {
-		return "", ErrMissingServiceEntry
-	}
-
-	if len(state.endpoints) == 0 {
-		return "", ErrMissingEndpoints
-	}
-	klog.V(0).Infof("NextEndpoint for service %q, srcAddr=%v: endpoints: %+v", svcPort, srcAddr, state.endpoints)
-	sessionAffinityEnabled := isSessionAffinity(&state.affinity)
-
-	var ipaddr string
-	if sessionAffinityEnabled {
-		// Caution: don't shadow ipaddr
-		var err error
-		ipaddr, _, err = net.SplitHostPort(srcAddr.String())
-		if err != nil {
-			return "", fmt.Errorf("malformed source address %q: %v", srcAddr.String(), err)
+		if !exists || state == nil {
+			return "", ErrMissingServiceEntry
 		}
-		if !sessionAffinityReset {
-			sessionAffinity, exists := state.affinity.affinityMap[ipaddr]
-			if exists && int(time.Since(sessionAffinity.lastUsed).Seconds()) < state.affinity.ttlSeconds {
-				// Affinity wins.
-				endpoint := sessionAffinity.endpoint
-				sessionAffinity.lastUsed = time.Now()
-				klog.V(0).Infof("NextEndpoint for service %q from IP %s with sessionAffinity %#v: %s", svcPort, ipaddr, sessionAffinity, endpoint)
-				return endpoint, nil
+		klog.V(0).Infof("<<< Break point 00: ", svcPort.Name)
+		if len(state.endpoints) == 0 {
+			return "", ErrMissingEndpoints
+		}
+
+		klog.V(0).Infof("NextEndpoint for service %q, srcAddr=%v: endpoints: %+v", svcPort, srcAddr, state.endpoints)
+		sessionAffinityEnabled := isSessionAffinity(&state.affinity)
+		klog.V(0).Infof("<<< Break point 01: ", svcPort.Name)
+		var ipaddr string
+		if sessionAffinityEnabled {
+			// Caution: don't shadow ipaddr
+			var err error
+			ipaddr, _, err = net.SplitHostPort(srcAddr.String())
+			if err != nil {
+				return "", fmt.Errorf("malformed source address %q: %v", srcAddr.String(), err)
+			}
+			if !sessionAffinityReset {
+				sessionAffinity, exists := state.affinity.affinityMap[ipaddr]
+				if exists && int(time.Since(sessionAffinity.lastUsed).Seconds()) < state.affinity.ttlSeconds {
+					// Affinity wins.
+					endpoint := sessionAffinity.endpoint
+					sessionAffinity.lastUsed = time.Now()
+					klog.V(0).Infof("NextEndpoint for service %q from IP %s with sessionAffinity %#v: %s", svcPort, ipaddr, sessionAffinity, endpoint)
+					return endpoint, nil
+				}
 			}
 		}
-	}
 
-	var endpoint string
-	if len(state.localendpoints) == 0 {
-		endpoint = state.endpoints[state.index]
-		state.index = (state.index + 1) % len(state.endpoints)
+		var endpoint string
+		if len(state.localendpoints) == 0 {
+			endpoint = state.endpoints[state.index]
+			state.index = (state.index + 1) % len(state.endpoints)
 
-	} else {
-		endpoint = state.localendpoints[state.localindex]
-		state.localindex = (state.localindex + 1) % len(state.localendpoints)
-	}
-	/*END*/
-
-	if sessionAffinityEnabled {
-		var affinity *affinityState
-		affinity = state.affinity.affinityMap[ipaddr]
-		if affinity == nil {
-			affinity = new(affinityState) //&affinityState{ipaddr, "TCP", "", endpoint, time.Now()}
-			state.affinity.affinityMap[ipaddr] = affinity
+		} else {
+			endpoint = state.localendpoints[state.localindex]
+			state.localindex = (state.localindex + 1) % len(state.localendpoints)
 		}
-		affinity.lastUsed = time.Now()
-		affinity.endpoint = endpoint
-		affinity.clientIP = ipaddr
-		klog.V(0).Infof("Updated affinity key %s: %#v", ipaddr, state.affinity.affinityMap[ipaddr])
-	}
-	klog.V(0).Infof("<<< NEXT-ENDPOINT: %q >>>", endpoint)
-	return endpoint, nil
+		/*END*/
+		if sessionAffinityEnabled {
+			var affinity *affinityState
+			affinity = state.affinity.affinityMap[ipaddr]
+			if affinity == nil {
+				affinity = new(affinityState) //&affinityState{ipaddr, "TCP", "", endpoint, time.Now()}
+				state.affinity.affinityMap[ipaddr] = affinity
+			}
+			affinity.lastUsed = time.Now()
+			affinity.endpoint = endpoint
+			affinity.clientIP = ipaddr
+			klog.V(0).Infof("Updated affinity key %s: %#v", ipaddr, state.affinity.affinityMap[ipaddr])
+		}
+		klog.V(0).Infof("<<< NEXT-ENDPOINT: %q >>>", endpoint)
+		return endpoint, nil
 }
 
 // Remove any session affinity records associated to a particular endpoint (for example when a pod goes down).
@@ -312,31 +318,28 @@ func (lb *LoadBalancerRR) OnEndpointsAdd(endpoints *v1.Endpoints) {
 	if err != nil {
 		klog.V(1).Infof("Roudrobin: Couldn't determine hostname")
 	}
-	/*END*/
 
 	lb.lock.Lock()
 	defer lb.lock.Unlock()
-
 	for portname := range portsToEndpoints {
 		klog.V(0).Infof("Roudrobin: portname %s", portname)
 		svcPort := proxy.ServicePortName{NamespacedName: types.NamespacedName{Namespace: endpoints.Namespace, Name: endpoints.Name}, Port: portname}
-		newEndpoints := portsToEndpoints[portname]
 
-		/*LOCALT*/
-		nodenames := portsToNodeNames[portname]
-		/*END*/
-		state, exists := lb.services[svcPort]
+
+		tmp_metric_filter = "metrics-server"
+		if !strings.Contains(svcPort.Name, tmp_metric_filter) {
+			klog.V(0).Infof("<<<< ADD - WITHOUT - Metricserver: %s>>>> ", svcPort.Name)
+			newEndpoints := portsToEndpoints[portname]
+			nodenames := portsToNodeNames[portname] /*LOCALT*/
+			state, exists := lb.services[svcPort]
 		if !exists || state == nil || len(newEndpoints) > 0 {
-
 			klog.V(0).Infof("Roudrobin: Setting endpoints for %s to %+v", svcPort, newEndpoints)
 			// OnEndpointsAdd can be called without NewService being called externally.
 			// To be safe we will call it here.  A new service will only be created
 			// if one does not already exist.
 			state = lb.newServiceInternal(svcPort, v1.ServiceAffinity(""), 0)
-
-			/*LOCALT*/
-			state.localendpoints = nil
-			for j := range newEndpoints{
+			state.localendpoints = nil /*LOCALT*/
+			for j := range newEndpoints {
 				ep, ok := state.otherEndpoints[nodenames[j]]
 				klog.V(0).Infof("<<< ep-check: >>> -->", ep)
 				if ok {
@@ -344,10 +347,9 @@ func (lb *LoadBalancerRR) OnEndpointsAdd(endpoints *v1.Endpoints) {
 				}
 			}
 			for i := range newEndpoints {
-
 				if nodenames[i] == hostname {
 					state.localendpoints = append(state.localendpoints, newEndpoints[i])
-				} else{
+				} else {
 					ep, ok := state.otherEndpoints[nodenames[i]]
 					klog.V(0).Infof("<<< State of Endpoint: >>>", ep)
 					if ok {
@@ -358,21 +360,18 @@ func (lb *LoadBalancerRR) OnEndpointsAdd(endpoints *v1.Endpoints) {
 					//klog.V(0).Infof(" <<< ADD - state.otherEndpoints %+v OF NODENAMES %+v  >>> -->", state.otherEndpoints[nodenames[i]], nodenames[i])
 				}
 			}
-			klog.V(0).Infof("LOCAL OnEndpointsAdd: service %s local endpoint %+v and other endpoint %+v", portname,state.localendpoints,state.otherEndpoints)
-
+			klog.V(0).Infof("LOCAL OnEndpointsAdd: service %s local endpoint %+v and other endpoint %+v", portname, state.localendpoints, state.otherEndpoints)
 			state.index = 0
-			/*LOCALT*/
-			state.localindex = 0
-			/*END*/
+			state.localindex = 0 /*LOCALT*/
 		}
 	}
+}
 }
 
 func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoints) {
 	portsToEndpoints := util.BuildPortsToEndpointsMap(endpoints)
 	oldPortsToEndpoints := util.BuildPortsToEndpointsMap(oldEndpoints)
 	registeredEndpoints := make(map[proxy.ServicePortName]bool)
-
 	/*LOCALT*/
 	portsToNodeNames := util.BuildPortsToNodeNamesMap(endpoints)
 	hostname, err := nodeutil.GetHostname("")
@@ -386,10 +385,16 @@ func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoint
 
 	for portname := range portsToEndpoints {
 		svcPort := proxy.ServicePortName{NamespacedName: types.NamespacedName{Namespace: endpoints.Namespace, Name: endpoints.Name}, Port: portname}
-		newEndpoints := portsToEndpoints[portname]
-		nodenames := portsToNodeNames[portname] //local
-		state, exists := lb.services[svcPort]
 
+
+		klog.V(0).Infof("<<< Roudrobin: Namespace %s, Name %s >>>", svcPort.Namespace, svcPort.Name)
+
+		tmp_metric_filter = "metrics-server"
+		if !strings.Contains(svcPort.Name, tmp_metric_filter){
+			klog.V(0).Infof("<<<< UPDATE - WITHOUT - Metricserver: %s>>>> ", svcPort.Name)
+			newEndpoints := portsToEndpoints[portname]
+			nodenames := portsToNodeNames[portname] //local
+			state, exists := lb.services[svcPort]
 		curEndpoints := []string{}
 		if state != nil {
 			curEndpoints = state.endpoints
@@ -437,8 +442,8 @@ func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoint
 			state.localindex = 0
 		}
 		registeredEndpoints[svcPort] = true
+		}
 	}
-
 	// Now remove all endpoints missing from the update.
 	for portname := range oldPortsToEndpoints {
 		svcPort := proxy.ServicePortName{NamespacedName: types.NamespacedName{Namespace: oldEndpoints.Namespace, Name: oldEndpoints.Name}, Port: portname}
