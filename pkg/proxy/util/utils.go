@@ -20,9 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
-	"strconv"
-
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	utilrand "k8s.io/apimachinery/pkg/util/rand"
@@ -30,6 +27,8 @@ import (
 	"k8s.io/client-go/tools/record"
 	helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 	utilnet "k8s.io/utils/net"
+	"net"
+	"strconv"
 
 	"k8s.io/klog"
 )
@@ -67,7 +66,6 @@ func BuildPortsToEndpointsMap(endpoints *v1.Endpoints) map[string][]string {
 				addr := &ss.Addresses[i]
 				if isValidEndpoint(addr.IP, int(port.Port)) {
 					portsToEndpoints[port.Name] = append(portsToEndpoints[port.Name], net.JoinHostPort(addr.IP, strconv.Itoa(int(port.Port))))
-					klog.V(0).Infof("NextEndpoint-00 for Name %q, Port=%v: ", port.Name, port.Port)
 				}
 			}
 		}
@@ -87,14 +85,11 @@ func BuildPortsToNodeNamesMap(endpoints *v1.Endpoints) map[string][]string {
 				addr := &ss.Addresses[i]
 				if isValidEndpoint(addr.IP, int(port.Port)) {
 					NameOfNode := addr.NodeName
-					klog.V(0).Infof("NextEndpoint-01 for Name %q, Port=%v: NameOfNode: %+v", port.Name, port.Port, NameOfNode)
 					if NameOfNode== nil {
 						portsToNodeNames[port.Name] = append(portsToNodeNames[port.Name], "")
 					} else {
 						portsToNodeNames[port.Name] = append(portsToNodeNames[port.Name], *NameOfNode)
 					}
-					klog.V(0).Infof("NextEndpoint-02 for Name %q, Port=%v: NameOfNode: %+v", port.Name, port.Port, NameOfNode)
-					//portsToNodeNames[port.Name] = append(portsToNodeNames[port.Name], *addr.NodeName)
 				}
 			}
 		}

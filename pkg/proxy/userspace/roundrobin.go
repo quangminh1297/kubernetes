@@ -29,7 +29,6 @@ import (
 	"k8s.io/kubernetes/pkg/util/slice"
 	"net"
 	"reflect"
-	"strings"
 	"sync"
 	"time"
 )
@@ -216,13 +215,7 @@ func (lb *LoadBalancerRR) NextEndpoint_V2(svcPort proxy.ServicePortName, srcAddr
 	//tmp_metric := "metrics-server"
 	lb.lock.Lock()
 	defer lb.lock.Unlock()
-	//tmp_metric_filter = "metrics-server"
-	//if strings.Contains(svcPort.Name, tmp_metric_filter)
 		state, exists := lb.services[svcPort]
-		klog.V(0).Infof("<<< LEN Endpoint: ", len(state.endpoints))
-		klog.V(0).Infof("<<< LEN Endpoint & Info: ", svcPort.Namespace)
-		klog.V(0).Infof("<<< LEN Endpoint & Info: ", svcPort.Name)
-
 		if !exists || state == nil {
 			return "", ErrMissingServiceEntry
 		}
@@ -264,6 +257,7 @@ func (lb *LoadBalancerRR) NextEndpoint_V2(svcPort proxy.ServicePortName, srcAddr
 			state.localindex = (state.localindex + 1) % len(state.localendpoints)
 		}
 		/*END*/
+
 		if sessionAffinityEnabled {
 			var affinity *affinityState
 			affinity = state.affinity.affinityMap[ipaddr]
@@ -324,10 +318,6 @@ func (lb *LoadBalancerRR) OnEndpointsAdd(endpoints *v1.Endpoints) {
 	for portname := range portsToEndpoints {
 		klog.V(0).Infof("Roudrobin: portname %s", portname)
 		svcPort := proxy.ServicePortName{NamespacedName: types.NamespacedName{Namespace: endpoints.Namespace, Name: endpoints.Name}, Port: portname}
-
-
-		tmp_metric_filter = "metrics-server"
-		if !strings.Contains(svcPort.Name, tmp_metric_filter) {
 			klog.V(0).Infof("<<<< ADD - WITHOUT - Metricserver: %s>>>> ", svcPort.Name)
 			newEndpoints := portsToEndpoints[portname]
 			nodenames := portsToNodeNames[portname] /*LOCALT*/
@@ -366,7 +356,6 @@ func (lb *LoadBalancerRR) OnEndpointsAdd(endpoints *v1.Endpoints) {
 		}
 	}
 }
-}
 
 func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoints) {
 	portsToEndpoints := util.BuildPortsToEndpointsMap(endpoints)
@@ -382,19 +371,11 @@ func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoint
 
 	lb.lock.Lock()
 	defer lb.lock.Unlock()
-
 	for portname := range portsToEndpoints {
 		svcPort := proxy.ServicePortName{NamespacedName: types.NamespacedName{Namespace: endpoints.Namespace, Name: endpoints.Name}, Port: portname}
-
-
-		klog.V(0).Infof("<<< Roudrobin: Namespace %s, Name %s >>>", svcPort.Namespace, svcPort.Name)
-
-		tmp_metric_filter = "metrics-server"
-		if !strings.Contains(svcPort.Name, tmp_metric_filter){
-			klog.V(0).Infof("<<<< UPDATE - WITHOUT - Metricserver: %s>>>> ", svcPort.Name)
-			newEndpoints := portsToEndpoints[portname]
-			nodenames := portsToNodeNames[portname] //local
-			state, exists := lb.services[svcPort]
+		newEndpoints := portsToEndpoints[portname]
+		nodenames := portsToNodeNames[portname] //local
+		state, exists := lb.services[svcPort]
 		curEndpoints := []string{}
 		if state != nil {
 			curEndpoints = state.endpoints
@@ -408,12 +389,11 @@ func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoint
 			// if one does not already exist.  The affinity will be updated
 			// later, once NewService is called.
 			state = lb.newServiceInternal(svcPort, v1.ServiceAffinity(""), 0)
-
 			state.endpoints = util.ShuffleStrings(newEndpoints) // original
 
 			/**LOCALY**/
 			state.localendpoints = nil
-			for j := range newEndpoints{
+			for j := range newEndpoints {
 				ep, ok := state.otherEndpoints[nodenames[j]]
 				klog.V(0).Infof("<<< ep-check: >>> -->", ep)
 				if ok {
@@ -423,7 +403,7 @@ func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoint
 			for i := range newEndpoints {
 				if nodenames[i] == hostname {
 					state.localendpoints = append(state.localendpoints, newEndpoints[i])
-				} else{
+				} else {
 					ep, ok := state.otherEndpoints[nodenames[i]]
 					klog.V(0).Infof("<<< ep-check >>>", ep)
 					if ok {
@@ -435,14 +415,13 @@ func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoint
 					//klog.V(0).Infof(" <<< UPDATE - state.otherEndpoints %+v OF NODENAMES %+v  >>> -->", state.otherEndpoints[nodenames[i]], nodenames[i])
 				}
 			}
-			klog.V(0).Infof("LoadBalancerRR: service %s LOCAL endpoint %+v and other endpoint %+v", portname,state.localendpoints,state.otherEndpoints)
+			klog.V(0).Infof("LoadBalancerRR: service %s LOCAL endpoint %+v and other endpoint %+v", portname, state.localendpoints, state.otherEndpoints)
 			/*END*/
 
 			state.index = 0
 			state.localindex = 0
 		}
 		registeredEndpoints[svcPort] = true
-		}
 	}
 	// Now remove all endpoints missing from the update.
 	for portname := range oldPortsToEndpoints {
