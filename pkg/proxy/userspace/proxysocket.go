@@ -141,7 +141,7 @@ func (tcp *tcpProxySocket) ProxyLoop_V2(service proxy.ServicePortName, myInfo *S
 			klog.Errorf("Accept failed: %v", err)
 			continue
 		}
-		//klog.V(0).Infof("Accepted TCP connection from %v to %v", inConn.RemoteAddr(), inConn.LocalAddr())
+		klog.V(0).Infof("Accepted TCP connection from %v to %v", inConn.RemoteAddr(), inConn.LocalAddr())
 		outConn, err := TryConnectEndpoints_V2(service, inConn.(*net.TCPConn).RemoteAddr(), "tcp", loadBalancer)
 
 		if err != nil {
