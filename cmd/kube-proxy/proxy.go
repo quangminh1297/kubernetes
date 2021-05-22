@@ -18,6 +18,7 @@ package main
 
 import (
 	goflag "flag"
+	"k8s.io/klog"
 	"math/rand"
 	"os"
 	"time"
@@ -44,7 +45,7 @@ func main() {
 	// utilflag.InitFlags()
 	logs.InitLogs()
 	defer logs.FlushLogs()
-
+	klog.V(0).Infof("<<< ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||| >>>")
 	if err := command.Execute(); err != nil {
 		os.Exit(1)
 	}

@@ -17,16 +17,23 @@ limitations under the License.
 package userspace
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
+	//	"k8s.io/client-go/kubernetes"
+
+	//	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/proxy"
 	"k8s.io/kubernetes/pkg/proxy/util"
 	nodeutil "k8s.io/kubernetes/pkg/util/node"
 	"k8s.io/kubernetes/pkg/util/slice"
+	metrics "k8s.io/metrics/pkg/client/clientset/versioned"
 	"net"
 	"reflect"
 	"sync"
@@ -151,25 +158,20 @@ func (lb *LoadBalancerRR) NextEndpoint_V2(svcPort proxy.ServicePortName, srcAddr
 	defer lb.lock.Unlock()
 	state, exists := lb.services[svcPort]
 	if !exists || state == nil {
-			return "", ErrMissingServiceEntry
+		return "", ErrMissingServiceEntry
 	}
 	if len(state.endpoints) == 0 {
 		return "", ErrMissingEndpoints
 	}
 	klog.V(0).Infof("NextEndpoint for service %q, srcAddr=%v: endpoints: %+v", svcPort, srcAddr, state.endpoints)
 	sessionAffinityEnabled := isSessionAffinity(&state.affinity)
-
-	/**/
-
-	/**/
-
 	var ipaddr string
 	if sessionAffinityEnabled {
 		// Caution: don't shadow ipaddr
 		var err error
 		ipaddr, _, err = net.SplitHostPort(srcAddr.String())
 		if err != nil {
-				return "", fmt.Errorf("malformed source address %q: %v", srcAddr.String(), err)
+			return "", fmt.Errorf("malformed source address %q: %v", srcAddr.String(), err)
 		}
 		if !sessionAffinityReset {
 			sessionAffinity, exists := state.affinity.affinityMap[ipaddr]
@@ -251,9 +253,9 @@ func (lb *LoadBalancerRR) OnEndpointsAdd(endpoints *v1.Endpoints) {
 	for portname := range portsToEndpoints {
 		klog.V(0).Infof("Roudrobin: portname %s", portname)
 		svcPort := proxy.ServicePortName{NamespacedName: types.NamespacedName{Namespace: endpoints.Namespace, Name: endpoints.Name}, Port: portname}
-			newEndpoints := portsToEndpoints[portname]
-			nodenames := portsToNodeNames[portname] /*LOCALT*/
-			state, exists := lb.services[svcPort]
+		newEndpoints := portsToEndpoints[portname]
+		nodenames := portsToNodeNames[portname] /*LOCALT*/
+		state, exists := lb.services[svcPort]
 		if !exists || state == nil || len(newEndpoints) > 0 {
 			klog.V(0).Infof("Roudrobin: Setting endpoints for %s to %+v", svcPort, newEndpoints)
 			// OnEndpointsAdd can be called without NewService being called externally.
@@ -300,6 +302,40 @@ func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoint
 		klog.V(1).Infof("LoadBalancerRR: Couldn't determine hostname")
 	}
 	/*END*/
+	/**/
+	klog.V(0).Infof("BREAK POINT 01")
+	config, err0 := clientcmd.BuildConfigFromFlags("", "/home/config")
+	if err0 != nil{
+		panic(err0)
+		klog.V(0).Infof("<<< err0 : %s >>>", err0)
+	}
+	klog.V(0).Infof("BREAK POINT 02")
+	mc, err1 := metrics.NewForConfig(config)
+
+
+	if err1 != nil {
+		panic(err1)
+		klog.V(0).Infof("<<< err1 : %s >>>", err1)
+	}
+	klog.V(0).Infof("BREAK POINT 03")
+	podMetrics, _ := mc.MetricsV1beta1().PodMetricses(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
+	klog.V(0).Infof("BREAK POINT 04")
+	for _, podMetric := range podMetrics.Items {
+		klog.V(0).Infof("BREAK POINT 05")
+		containerMetrics := podMetric.Containers
+		for _, containerMetric := range containerMetrics {
+			klog.V(0).Infof("BREAK POINT 06")
+			containerCPUUsage, ok := containerMetric.Usage.Cpu().AsInt64()
+			if !ok {
+				klog.V(0).Infof("Error-container: ", ok)
+			}
+			klog.V(0).Infof("<<< containerCPUUsage >>>", containerCPUUsage)
+			//print("CPU usage = %d", containerCPUUsage)
+		}
+	}
+
+
+
 
 	lb.lock.Lock()
 	defer lb.lock.Unlock()
