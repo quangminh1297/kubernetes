@@ -184,6 +184,10 @@ func (lb *LoadBalancerRR) NextEndpoint_V2(svcPort proxy.ServicePortName, srcAddr
 			}
 		}
 	}
+
+
+
+
 	var endpoint string
 	if len(state.localendpoints) == 0 {
 		endpoint = state.endpoints[state.index]
@@ -302,38 +306,46 @@ func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoint
 		klog.V(1).Infof("LoadBalancerRR: Couldn't determine hostname")
 	}
 	/*END*/
+
 	/**/
-	klog.V(0).Infof("BREAK POINT 01")
 	config, err0 := clientcmd.BuildConfigFromFlags("", "/home/config")
 	if err0 != nil{
 		panic(err0)
 		klog.V(0).Infof("<<< err0 : %s >>>", err0)
 	}
-	klog.V(0).Infof("BREAK POINT 02")
 	mc, err1 := metrics.NewForConfig(config)
-
-
 	if err1 != nil {
 		panic(err1)
 		klog.V(0).Infof("<<< err1 : %s >>>", err1)
 	}
-	klog.V(0).Infof("BREAK POINT 03")
+
 	podMetrics, _ := mc.MetricsV1beta1().PodMetricses(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
-	klog.V(0).Infof("BREAK POINT 04")
 	for _, podMetric := range podMetrics.Items {
-		klog.V(0).Infof("BREAK POINT 05")
 		containerMetrics := podMetric.Containers
 		for _, containerMetric := range containerMetrics {
-			klog.V(0).Infof("BREAK POINT 06")
-			containerCPUUsage, ok := containerMetric.Usage.Cpu().AsInt64()
-			if !ok {
-				klog.V(0).Infof("Error-container: ", ok)
-			}
+			//testUsage := containerMetrics[tmp].Usage
+
+
+			containerCPUUsage := containerMetric.Usage.Cpu().String()
+			containerRAMUsage := containerMetric.Usage.Memory().String()
+			containerPODUsage := containerMetric.Usage.Pods().String()
+			containerSSDUsage := containerMetric.Usage.Storage().String()
+			containerName := containerMetric.Name
+
 			klog.V(0).Infof("<<< containerCPUUsage >>>", containerCPUUsage)
-			//print("CPU usage = %d", containerCPUUsage)
+			klog.V(0).Infof("<<< containerRAMUsage >>>", containerRAMUsage)
+			klog.V(0).Infof("<<< containerPODUsage >>>", containerPODUsage)
+			klog.V(0).Infof("<<< containerSSDUsage >>>", containerSSDUsage)
+			klog.V(0).Infof("<<< containerName >>>", containerName)
+
+			containerCPUUsage_conveter := containerMetric.Usage.Cpu().MilliValue()
+			klog.V(0).Infof("<<< containerCPUUsage_conveter >>>", containerCPUUsage_conveter)
+			containerRAMUsage_conveter := containerMetric.Usage.Memory().Value()
+			klog.V(0).Infof("<<< containerRAMUsage_conveter >>>", ((containerRAMUsage_conveter)/1024/1024))
+
 		}
 	}
-
+	/**/
 
 
 
