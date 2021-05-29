@@ -153,7 +153,6 @@ func (lb *LoadBalancerRR) ServiceHasEndpoints(svcPort proxy.ServicePortName) boo
 func (lb *LoadBalancerRR) NextEndpoint_V2(svcPort proxy.ServicePortName, srcAddr net.Addr, sessionAffinityReset bool) (string, error) {
 	// Coarse locking is simple.  We can get more fine-grained if/when we
 	// can prove it matters.
-	//tmp_metric := "metrics-server"
 	lb.lock.Lock()
 	defer lb.lock.Unlock()
 	state, exists := lb.services[svcPort]
@@ -184,10 +183,6 @@ func (lb *LoadBalancerRR) NextEndpoint_V2(svcPort proxy.ServicePortName, srcAddr
 			}
 		}
 	}
-
-
-
-
 	var endpoint string
 	if len(state.localendpoints) == 0 {
 		endpoint = state.endpoints[state.index]
@@ -285,7 +280,7 @@ func (lb *LoadBalancerRR) OnEndpointsAdd(endpoints *v1.Endpoints) {
 					} else {
 						state.otherEndpoints[nodenames[i]] = &nodeEndpoints{endpoints: []string{newEndpoints[i]}, index: 0}
 					}
-					//klog.V(0).Infof(" <<< ADD - state.otherEndpoints %+v OF NODENAMES %+v  >>> -->", state.otherEndpoints[nodenames[i]], nodenames[i])
+					klog.V(0).Infof(" <<< ADD - state.otherEndpoints %+v OF NODENAMES %+v  >>> ", state.otherEndpoints[nodenames[i]], nodenames[i])
 				}
 			}
 			klog.V(0).Infof("LOCAL OnEndpointsAdd: service %s local endpoint %+v and other endpoint %+v", portname, state.localendpoints, state.otherEndpoints)
@@ -318,37 +313,28 @@ func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoint
 		panic(err1)
 		klog.V(0).Infof("<<< err1 : %s >>>", err1)
 	}
-
-	podMetrics, _ := mc.MetricsV1beta1().PodMetricses(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
+	podMetrics, _ := mc.MetricsV1beta1().PodMetricses(metav1.NamespaceDefault).List(context.TODO(), metav1.ListOptions{})
 	for _, podMetric := range podMetrics.Items {
 		containerMetrics := podMetric.Containers
+		klog.V(0).Infof("<<< containerMetrics-LEN >>>", len(containerMetrics))
+		MetricSource := podMetric.ObjectMeta
 		for _, containerMetric := range containerMetrics {
-			//testUsage := containerMetrics[tmp].Usage
-
-
-			containerCPUUsage := containerMetric.Usage.Cpu().String()
-			containerRAMUsage := containerMetric.Usage.Memory().String()
-			containerPODUsage := containerMetric.Usage.Pods().String()
-			containerSSDUsage := containerMetric.Usage.Storage().String()
+			//containerCPUUsage := containerMetric.Usage.Cpu().String()
+			//containerRAMUsage := containerMetric.Usage.Memory().String()
 			containerName := containerMetric.Name
-
-			klog.V(0).Infof("<<< containerCPUUsage >>>", containerCPUUsage)
-			klog.V(0).Infof("<<< containerRAMUsage >>>", containerRAMUsage)
-			klog.V(0).Infof("<<< containerPODUsage >>>", containerPODUsage)
-			klog.V(0).Infof("<<< containerSSDUsage >>>", containerSSDUsage)
-			klog.V(0).Infof("<<< containerName >>>", containerName)
-
 			containerCPUUsage_conveter := containerMetric.Usage.Cpu().MilliValue()
-			klog.V(0).Infof("<<< containerCPUUsage_conveter >>>", containerCPUUsage_conveter)
 			containerRAMUsage_conveter := containerMetric.Usage.Memory().Value()
-			klog.V(0).Infof("<<< containerRAMUsage_conveter >>>", ((containerRAMUsage_conveter)/1024/1024))
-
+			klog.V(0).Infof("<<< container-Name >>>", containerName)
+			klog.V(0).Infof("<<< container-CPU-Usage_conveter >>>", containerCPUUsage_conveter)
+			klog.V(0).Infof("<<< container-RAM-Usage_conveter >>>", ((containerRAMUsage_conveter)/1024/1024))
 		}
+		klog.V(0).Infof("<<< MetricSource-Name >>>", MetricSource.Name)
+		klog.V(0).Infof("<<< MetricSource-Namespace >>>", MetricSource.Namespace)
+		klog.V(0).Infof("<<< *********************************************************************** >>>")
+
 	}
+
 	/**/
-
-
-
 	lb.lock.Lock()
 	defer lb.lock.Unlock()
 	for portname := range portsToEndpoints {
@@ -371,7 +357,7 @@ func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoint
 			state = lb.newServiceInternal(svcPort, v1.ServiceAffinity(""), 0)
 			state.endpoints = util.ShuffleStrings(newEndpoints) // original
 
-			/**LOCALY**/
+			/**LOCAL**/
 			state.localendpoints = nil
 			for j := range newEndpoints {
 				ep, ok := state.otherEndpoints[nodenames[j]]
@@ -388,15 +374,13 @@ func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoint
 					klog.V(0).Infof("<<< ep-check >>>", ep)
 					if ok {
 						state.otherEndpoints[nodenames[i]].endpoints = append(state.otherEndpoints[nodenames[i]].endpoints, newEndpoints[i])
-						//
 					} else {
 						state.otherEndpoints[nodenames[i]] = &nodeEndpoints{endpoints: []string{newEndpoints[i]}, index: 0}
 					}
-					//klog.V(0).Infof(" <<< UPDATE - state.otherEndpoints %+v OF NODENAMES %+v  >>> -->", state.otherEndpoints[nodenames[i]], nodenames[i])
+					klog.V(0).Infof(" <<< UPDATE - state.otherEndpoints %+v OF NODENAMES %+v  >>> -->", state.otherEndpoints[nodenames[i]], nodenames[i])
 				}
 			}
 			/*END*/
-
 			state.index = 0
 			state.localindex = 0
 		}

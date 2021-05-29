@@ -77,6 +77,12 @@ func BuildPortsToEndpointsMap(endpoints *v1.Endpoints) map[string][]string {
 // portname. Explode Endpoints.Subsets[*] into this structure.
 func BuildPortsToNodeNamesMap(endpoints *v1.Endpoints) map[string][]string {
 	portsToNodeNames := map[string][]string{}
+	portsToPodNames := map[string][]string{}
+	var TargetRefName string
+	var TargetRefNamespace string
+
+
+
 	for i := range endpoints.Subsets {
 		ss := &endpoints.Subsets[i]
 		for i := range ss.Ports {
@@ -85,11 +91,21 @@ func BuildPortsToNodeNamesMap(endpoints *v1.Endpoints) map[string][]string {
 				addr := &ss.Addresses[i]
 				if isValidEndpoint(addr.IP, int(port.Port)) {
 					NameOfNode := addr.NodeName
+					if addr.TargetRef != nil{
+						TargetRefName = addr.TargetRef.Name
+						TargetRefNamespace = addr.TargetRef.Namespace
+						klog.V(0).Infof("TargetRefName: ", TargetRefName)
+						klog.V(0).Infof("TargetRefNamespace: ", TargetRefNamespace)
+					}
 					if NameOfNode== nil {
 						portsToNodeNames[port.Name] = append(portsToNodeNames[port.Name], "")
 					} else {
 						portsToNodeNames[port.Name] = append(portsToNodeNames[port.Name], *NameOfNode)
+						portsToPodNames[port.Name] = append(portsToPodNames[port.Name], TargetRefName)
 					}
+					fmt.Println("port.Name: ", port.Name)
+					klog.V(0).Infof("PortsTo-NodeNames %v", portsToNodeNames[port.Name])
+					klog.V(0).Infof("PortsTo-PodNames %v", portsToPodNames[port.Name])
 				}
 			}
 		}
