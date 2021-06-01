@@ -169,11 +169,8 @@ func (lb *LoadBalancerRR) NextEndpoint_V2(svcPort proxy.ServicePortName, srcAddr
 	if len(state.endpoints) == 0 {
 		return "", ErrMissingEndpoints
 	}
-	//ConverEndpointToPodName = map[string]string{}
-	klog.V(0).Infof("<<< LIST CHECKOUT OF RANGE - NextEndpoint_V2 001 >>>", ConverEndpointToPodName)
 	klog.V(0).Infof("NextEndpoint for service %q, srcAddr=%v: endpoints: %+v", svcPort, srcAddr, state.endpoints)
 	sessionAffinityEnabled := isSessionAffinity(&state.affinity)
-	go MonitorMetricCustom()
 	var ipaddr string
 	if sessionAffinityEnabled {
 		// Caution: don't shadow ipaddr
@@ -193,33 +190,53 @@ func (lb *LoadBalancerRR) NextEndpoint_V2(svcPort proxy.ServicePortName, srcAddr
 			}
 		}
 	}
-
-	klog.V(0).Infof("<<< LIST CHECKOUT OF RANGE	 - NextEndpoint_V2 002 >>>", ConverEndpointToPodName)
+	tmp_CPU, tmp_RAM := LocalNodeResource(CPUMap, RAMMap, ConverEndpointToPodName, state.localendpoints)
 	var endpoint string
-	if len(state.localendpoints) == 0 {
-		endpoint = state.endpoints[state.index]
-		state.index = (state.index + 1) % len(state.endpoints)
-	} else {
-		/*
-		state.localindex: The number of Endpoint inside map
-		state.localendpoints : local Endpoint of Node which is received requested
-		ConverEndpointToPodName : Map of PodName, Key is Endpoint IP <map[EndpointIP]=PodName>
-		CPUMap, RAMMap: Map contain HW value(RAM/RESOURCE), Key is PodName <map[PodName]=Value(Int64)>
-		*/
+	tmpppp := "OFF"
+	if tmpppp == "ON" {
+		if len(state.localendpoints) == 0 {
+			endpoint = state.endpoints[state.index]
+			state.index = (state.index + 1) % len(state.endpoints)
+		} else {
+			/*
+				state.localindex: The number of Endpoint inside map
+				state.localendpoints : local Endpoint of Node which is received requested
+				ConverEndpointToPodName : Map of PodName, Key is Endpoint IP <map[EndpointIP]=PodName>
+				CPUMap, RAMMap: Map contain HW value(RAM/RESOURCE), Key is PodName <map[PodName]=Value(Int64)>
+			*/
+			endpoint = state.localendpoints[state.localindex]
+			state.localindex = (state.localindex + 1) % len(state.localendpoints)
+			klog.V(0).Infof("********************************************************************")
+			klog.V(0).Infof("<<< state.localindex >>>", state.localindex)
+			klog.V(0).Infof("<<< state.localendpoints >>>", state.localendpoints)
+			klog.V(0).Infof("<<< LEN OF state.localendpoints >>>", len(state.localendpoints))
+			klog.V(0).Infof("<<< LIST ConverEndpointToPodName - NextEndpoint >>>", ConverEndpointToPodName)
+			klog.V(0).Infof("<<< LEN OF ConverEndpointToPodName - NextEndpoint  >>>", len(ConverEndpointToPodName))
+			klog.V(0).Infof("<<< hostname ofMetricSource-CPUMap >>>", CPUMap)
+			klog.V(0).Infof("<<< hostname ofMetricSource-RAMMap >>>", RAMMap)
+			klog.V(0).Infof("<<< hostname ofMetricSource-ResultOfCPU: >>>", tmp_CPU)
+			klog.V(0).Infof("<<< hostname ofMetricSource-ResultOfRAM: >>>", tmp_RAM)
+			klog.V(0).Infof("<<< ********************** NEXT ENDPOINT *************************** >>>")
+		}
+	}
+
+	if len(state.localendpoints) != 0 && tmp_CPU == true && tmp_RAM == true{
 		endpoint = state.localendpoints[state.localindex]
 		state.localindex = (state.localindex + 1) % len(state.localendpoints)
+		klog.V(0).Infof("******************************  V2  **************************************")
 		klog.V(0).Infof("<<< state.localindex >>>", state.localindex)
 		klog.V(0).Infof("<<< state.localendpoints >>>", state.localendpoints)
 		klog.V(0).Infof("<<< LEN OF state.localendpoints >>>", len(state.localendpoints))
 		klog.V(0).Infof("<<< LIST ConverEndpointToPodName - NextEndpoint >>>", ConverEndpointToPodName)
 		klog.V(0).Infof("<<< LEN OF ConverEndpointToPodName - NextEndpoint  >>>", len(ConverEndpointToPodName))
-		klog.V(0).Infof("********************************************************************")
 		klog.V(0).Infof("<<< hostname ofMetricSource-CPUMap >>>", CPUMap)
 		klog.V(0).Infof("<<< hostname ofMetricSource-RAMMap >>>", RAMMap)
-		klog.V(0).Infof("<<< ********************** NEXT ENDPOINT *************************** >>>")
-
-
-
+		klog.V(0).Infof("<<< hostname ofMetricSource-ResultOfCPU: >>>", tmp_CPU)
+		klog.V(0).Infof("<<< hostname ofMetricSource-ResultOfRAM: >>>", tmp_RAM)
+		klog.V(0).Infof("<<< ********************** NEXT ENDPOINT -V2 *************************** >>>")
+	}else {
+		endpoint = state.endpoints[state.index]
+		state.index = (state.index + 1) % len(state.endpoints)
 	}
 	/*END*/
 	if sessionAffinityEnabled {
@@ -236,6 +253,53 @@ func (lb *LoadBalancerRR) NextEndpoint_V2(svcPort proxy.ServicePortName, srcAddr
 	}
 	klog.V(0).Infof("<<< NEXT-ENDPOINT: %q >>>", endpoint)
 	return endpoint, nil
+}
+
+/* This function is created by NGUYEN QUANG MINH - Support calculating Finnal result by CPU/RAM resource of Local Worker-Node*/
+/*Input xxx*/
+func LocalNodeResource(MapOfCPU map[string]int64, MapOfRAM map[string]int64, ConverEToNN map[string]string, EndpointMap []string) (bool,bool){
+	var (
+	Total_Custom_CPU int64
+	Total_Custom_RAM int64
+	Average_CPU float64
+	Average_RAM float64
+	Usage_Perventage_CPU float64
+	Usage_Perventage_RAM float64
+	ResultOfCPU bool
+	ResultOfRAM bool
+	)
+	NumberOfObject := len(EndpointMap)
+	Limitation_Value := 500
+	for tmp1 := range (EndpointMap){
+		Total_Custom_CPU += MapOfCPU[ConverEToNN[EndpointMap[tmp1]]]
+		Total_Custom_RAM += MapOfRAM[ConverEToNN[EndpointMap[tmp1]]]
+	}
+
+	klog.V(0).Infof("############################################################")
+	Average_CPU = float64(Total_Custom_CPU)/float64(NumberOfObject)
+	Usage_Perventage_CPU =(Average_CPU*100)/float64(Limitation_Value)
+
+	Average_RAM = float64(Total_Custom_RAM)/float64(NumberOfObject)
+	Usage_Perventage_RAM = (Average_RAM*100)/float64(Limitation_Value)
+
+	if Usage_Perventage_CPU < 80{
+		klog.V(0).Infof("CPU of Local Worker is *OK* - Usage %v", Usage_Perventage_CPU)
+		ResultOfCPU = true
+	}else {
+		klog.V(0).Infof("CPU of Local Worker is *NOT_OK* - Usage %v", Usage_Perventage_CPU)
+		ResultOfCPU = false
+	}
+	if Usage_Perventage_RAM < 80{
+		klog.V(0).Infof("RAM of Local Worker is *OK* - Usage %v", Usage_Perventage_RAM)
+		ResultOfRAM = true
+	}else {
+		klog.V(0).Infof("RAM of Local Worker is *NOT_OK* - Usage %v", Usage_Perventage_RAM)
+		ResultOfRAM = false
+	}
+	klog.V(0).Infof("CALCULATION HW: Total__CPU: %v - Total__RAM: %v", Total_Custom_CPU, Total_Custom_RAM)
+	klog.V(0).Infof("CALCULATION HW: Total_Custom_RAM = ", Total_Custom_RAM)
+	klog.V(0).Infof("############################################################")
+	return ResultOfCPU, ResultOfRAM
 }
 
 // Remove any session affinity records associated to a particular endpoint (for example when a pod goes down).
@@ -278,17 +342,11 @@ func (lb *LoadBalancerRR) OnEndpointsAdd(endpoints *v1.Endpoints) {
 	}
 	lb.lock.Lock()
 	defer lb.lock.Unlock()
-	//ConverEndpointToPodName = map[string]string{}
 	for portname := range portsToEndpoints {
 		svcPort := proxy.ServicePortName{NamespacedName: types.NamespacedName{Namespace: endpoints.Namespace, Name: endpoints.Name}, Port: portname}
 		newEndpoints := portsToEndpoints[portname]
 		nodenames := portsToNodeNames[portname] /*LOCALT*/
 		PodNames := portsToPodNames[portname]
-		//klog.V(0).Infof("OnEndpointsAdd: Nodenames map = %s", nodenames)
-		//klog.V(0).Infof("OnEndpointsAdd-OUT: PodNames map = %s", PodNames)
-		//klog.V(0).Infof("<<< LEN OF PodNames-OUT - OnEndpointsUpdate  >>>", len(PodNames))
-		//klog.V(0).Infof("<<< LIST newEndpoints-OUT - OnEndpointsAdd >>>", newEndpoints)
-		//klog.V(0).Infof("<<< LEN OF newEndpoints-OUT - OnEndpointsAdd  >>>", len(newEndpoints))
 		state, exists := lb.services[svcPort]
 		if !exists || state == nil || len(newEndpoints) > 0 {
 			klog.V(0).Infof("Roudrobin: Setting endpoints for %s to %+v", svcPort, newEndpoints)
@@ -306,18 +364,10 @@ func (lb *LoadBalancerRR) OnEndpointsAdd(endpoints *v1.Endpoints) {
 			}
 			for i := range newEndpoints {
 				if len(PodNames) != 0 {
-					//klog.V(0).Infof("OnEndpointsAdd-IN: PodNames map = %s", PodNames[i])
-					//klog.V(0).Infof("<<< LEN OF PodNames-IN - OnEndpointsAdd  >>>", len(PodNames))
-					//klog.V(0).Infof("<<< LIST newEndpoints-IN - OnEndpointsAdd >>>", newEndpoints[i])
-					//klog.V(0).Infof("<<< LEN OF newEndpoints-IN - OnEndpointsAdd  >>>", len(newEndpoints))
-
 					ConverEndpointToPodName[newEndpoints[i]] = PodNames[i]
 					klog.V(0).Infof("<<< LIST ConverEndpointToPodName-IN - OnEndpointsAdd >>>", ConverEndpointToPodName)
 					klog.V(0).Infof("<<< LEN OF ConverEndpointToPodName-IN - OnEndpointsAdd  >>>", len(ConverEndpointToPodName))
 				}
-				klog.V(0).Infof("<<< LIST CHECKOUT OF RANGE	 - OnEndpointsAdd >>>", ConverEndpointToPodName)
-				//klog.V(0).Infof("<<< LIST ConverEndpointToPodName - OnEndpointsAdd >>>", ConverEndpointToPodName)
-				//klog.V(0).Infof("<<< LEN OF ConverEndpointToPodName - OnEndpointsAdd  >>>", len(ConverEndpointToPodName))
 				if nodenames[i] == hostname {
 					state.localendpoints = append(state.localendpoints, newEndpoints[i])
 				} else {
@@ -337,29 +387,6 @@ func (lb *LoadBalancerRR) OnEndpointsAdd(endpoints *v1.Endpoints) {
 		}
 	}
 }
-
-//func CombinedEndPointAndPodName(oldEndpoints, endpoints *v1.Endpoints){
-//	portsToEndpoints := util.BuildPortsToEndpointsMap(endpoints)
-//	portsToNodeNames, portsToPodNames := util.BuildPortsToNodeNamesMap(endpoints)
-//	ConverEndpointToPodName = map[string]string{}
-//	for portname := range portsToEndpoints {
-//		newEndpoints := portsToEndpoints[portname]
-//		nodenames := portsToNodeNames[portname] //local
-//		PodNames := portsToPodNames[portname]
-//		for i := range newEndpoints {
-//			if len(PodNames) != 0 {
-//				//klog.V(0).Infof("OnEndpointsUpdate-IN: PodNames map = %s", PodNames[i])
-//				//klog.V(0).Infof("<<< LEN OF PodNames-IN - OnEndpointsUpdate  >>>", len(PodNames))
-//				//klog.V(0).Infof("<<< LIST newEndpoints-IN - OnEndpointsUpdate >>>", newEndpoints[i])
-//				//klog.V(0).Infof("<<< LEN OF newEndpoints-IN - OnEndpointsUpdate  >>>", len(newEndpoints))
-//				ConverEndpointToPodName[newEndpoints[i]] = PodNames[i]
-//				klog.V(0).Infof("<<< LIST ConverEndpointToPodName-IN - OnEndpointsUpdate >>>", ConverEndpointToPodName)
-//				klog.V(0).Infof("<<< LEN OF ConverEndpointToPodName-IN - OnEndpointsUpdate  >>>", len(ConverEndpointToPodName))
-//			}
-//		}
-//	}
-//}
-
 func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoints) {
 	portsToEndpoints := util.BuildPortsToEndpointsMap(endpoints)
 	oldPortsToEndpoints := util.BuildPortsToEndpointsMap(oldEndpoints)
@@ -367,7 +394,6 @@ func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoint
 	/*LOCALT*/
 	portsToNodeNames, portsToPodNames := util.BuildPortsToNodeNamesMap(endpoints)
 	hostname, err := nodeutil.GetHostname("")
-	//ConverEndpointToPodName = map[string]string{}
 	if err != nil {
 		klog.V(1).Infof("LoadBalancerRR: Couldn't determine hostname")
 	}
@@ -381,10 +407,10 @@ func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoint
 		PodNames := portsToPodNames[portname]
 		state, exists := lb.services[svcPort]
 		curEndpoints := []string{}
+		go MonitorMetricCustom(newEndpoints)
 		if state != nil {
 			curEndpoints = state.endpoints
 		}
-
 		if !exists || state == nil || len(curEndpoints) != len(newEndpoints) || !slicesEquiv(slice.CopyStrings(curEndpoints), newEndpoints) {
 			klog.V(0).Infof(" Setting endpoints for %s to %+v", svcPort, newEndpoints)
 			lb.removeStaleAffinity(svcPort, newEndpoints)
@@ -410,7 +436,6 @@ func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoint
 					klog.V(0).Infof("<<< LIST ConverEndpointToPodName-IN - OnEndpointsUpdate >>>", ConverEndpointToPodName)
 					klog.V(0).Infof("<<< LEN OF ConverEndpointToPodName-IN - OnEndpointsUpdate  >>>", len(ConverEndpointToPodName))
 				}
-				klog.V(0).Infof("<<< LIST CHECKOUT OF RANGE	 - OnEndpointsUpdate >>>", ConverEndpointToPodName)
 				if nodenames[i] == hostname {
 					state.localendpoints = append(state.localendpoints, newEndpoints[i])
 				} else {
@@ -493,8 +518,8 @@ func (lb *LoadBalancerRR) CleanupStaleStickySessions(svcPort proxy.ServicePortNa
 	}
 }
 
-func MonitorMetricCustom(){
-	for {
+func MonitorMetricCustom(RangeFor []string){
+	for range RangeFor{
 		config, err0 := clientcmd.BuildConfigFromFlags("", "/home/config")
 		if err0 != nil {
 			panic(err0)
@@ -519,17 +544,15 @@ func MonitorMetricCustom(){
 				containerRAMUsage_conveter := (containerMetric.Usage.Memory().Value() / 1024 / 1024)
 				GlobalVariable_RAM = containerRAMUsage_conveter
 				stupid_key := MetricSource.Name
-				//CPUMap[stupid_key] = append(CPUMap[stupid_key], containerCPUUsage_conveter)
-				//RAMMap[stupid_key] = append(RAMMap[stupid_key], containerRAMUsage_conveter)
 				CPUMap[stupid_key] = containerCPUUsage_conveter
 				RAMMap[stupid_key] = containerRAMUsage_conveter
 			}
 		}
-		//klog.V(0).Infof("<<< +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ >>>")
-		//klog.V(0).Infof("<<< Outside ofMetricSource-CPUMap >>>", CPUMap)
-		//klog.V(0).Infof("<<< Outside ofMetricSource-RAMMap >>>", RAMMap)
-		//klog.V(0).Infof("<<< +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ >>>")
-		time.Sleep(30 * time.Second)
+		klog.V(0).Infof("<<< +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ >>>")
+		klog.V(0).Infof("<<< Outside ofMetricSource-CPUMap >>>", CPUMap)
+		klog.V(0).Infof("<<< Outside ofMetricSource-RAMMap >>>", RAMMap)
+		klog.V(0).Infof("<<< +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ >>>")
+		time.Sleep(60 * time.Second)
 	}
 }
 
