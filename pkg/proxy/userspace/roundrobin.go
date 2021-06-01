@@ -44,9 +44,16 @@ var (
 	ErrMissingServiceEntry = errors.New("missing service entry")
 	ErrMissingEndpoints    = errors.New("missing endpoints")
 )
+var(
+	GlobalVariable_CPU int64
+	GlobalVariable_RAM int64
 
-var tmp_metric_filter string
-
+	//CPUMap map[string][]int64
+	//RAMMap map[string][]int64
+	CPUMap = make(map[string]int64)
+	RAMMap = make(map[string]int64)
+	ConverEndpointToPodName = make(map[string]string)
+)
 type affinityState struct {
 	clientIP string
 	//clientProtocol  api.Protocol //not yet used
@@ -162,8 +169,11 @@ func (lb *LoadBalancerRR) NextEndpoint_V2(svcPort proxy.ServicePortName, srcAddr
 	if len(state.endpoints) == 0 {
 		return "", ErrMissingEndpoints
 	}
+	//ConverEndpointToPodName = map[string]string{}
+	klog.V(0).Infof("<<< LIST CHECKOUT OF RANGE - NextEndpoint_V2 001 >>>", ConverEndpointToPodName)
 	klog.V(0).Infof("NextEndpoint for service %q, srcAddr=%v: endpoints: %+v", svcPort, srcAddr, state.endpoints)
 	sessionAffinityEnabled := isSessionAffinity(&state.affinity)
+	go MonitorMetricCustom()
 	var ipaddr string
 	if sessionAffinityEnabled {
 		// Caution: don't shadow ipaddr
@@ -183,13 +193,33 @@ func (lb *LoadBalancerRR) NextEndpoint_V2(svcPort proxy.ServicePortName, srcAddr
 			}
 		}
 	}
+
+	klog.V(0).Infof("<<< LIST CHECKOUT OF RANGE	 - NextEndpoint_V2 002 >>>", ConverEndpointToPodName)
 	var endpoint string
 	if len(state.localendpoints) == 0 {
 		endpoint = state.endpoints[state.index]
 		state.index = (state.index + 1) % len(state.endpoints)
 	} else {
+		/*
+		state.localindex: The number of Endpoint inside map
+		state.localendpoints : local Endpoint of Node which is received requested
+		ConverEndpointToPodName : Map of PodName, Key is Endpoint IP <map[EndpointIP]=PodName>
+		CPUMap, RAMMap: Map contain HW value(RAM/RESOURCE), Key is PodName <map[PodName]=Value(Int64)>
+		*/
 		endpoint = state.localendpoints[state.localindex]
 		state.localindex = (state.localindex + 1) % len(state.localendpoints)
+		klog.V(0).Infof("<<< state.localindex >>>", state.localindex)
+		klog.V(0).Infof("<<< state.localendpoints >>>", state.localendpoints)
+		klog.V(0).Infof("<<< LEN OF state.localendpoints >>>", len(state.localendpoints))
+		klog.V(0).Infof("<<< LIST ConverEndpointToPodName - NextEndpoint >>>", ConverEndpointToPodName)
+		klog.V(0).Infof("<<< LEN OF ConverEndpointToPodName - NextEndpoint  >>>", len(ConverEndpointToPodName))
+		klog.V(0).Infof("********************************************************************")
+		klog.V(0).Infof("<<< hostname ofMetricSource-CPUMap >>>", CPUMap)
+		klog.V(0).Infof("<<< hostname ofMetricSource-RAMMap >>>", RAMMap)
+		klog.V(0).Infof("<<< ********************** NEXT ENDPOINT *************************** >>>")
+
+
+
 	}
 	/*END*/
 	if sessionAffinityEnabled {
@@ -241,19 +271,24 @@ func (lb *LoadBalancerRR) removeStaleAffinity(svcPort proxy.ServicePortName, new
 
 func (lb *LoadBalancerRR) OnEndpointsAdd(endpoints *v1.Endpoints) {
 	portsToEndpoints := util.BuildPortsToEndpointsMap(endpoints)
-	portsToNodeNames := util.BuildPortsToNodeNamesMap(endpoints)
+	portsToNodeNames, portsToPodNames := util.BuildPortsToNodeNamesMap(endpoints)
 	hostname, err := nodeutil.GetHostname("")
 	if err != nil {
 		klog.V(1).Infof("Roudrobin: Couldn't determine hostname")
 	}
-
 	lb.lock.Lock()
 	defer lb.lock.Unlock()
+	//ConverEndpointToPodName = map[string]string{}
 	for portname := range portsToEndpoints {
-		klog.V(0).Infof("Roudrobin: portname %s", portname)
 		svcPort := proxy.ServicePortName{NamespacedName: types.NamespacedName{Namespace: endpoints.Namespace, Name: endpoints.Name}, Port: portname}
 		newEndpoints := portsToEndpoints[portname]
 		nodenames := portsToNodeNames[portname] /*LOCALT*/
+		PodNames := portsToPodNames[portname]
+		//klog.V(0).Infof("OnEndpointsAdd: Nodenames map = %s", nodenames)
+		//klog.V(0).Infof("OnEndpointsAdd-OUT: PodNames map = %s", PodNames)
+		//klog.V(0).Infof("<<< LEN OF PodNames-OUT - OnEndpointsUpdate  >>>", len(PodNames))
+		//klog.V(0).Infof("<<< LIST newEndpoints-OUT - OnEndpointsAdd >>>", newEndpoints)
+		//klog.V(0).Infof("<<< LEN OF newEndpoints-OUT - OnEndpointsAdd  >>>", len(newEndpoints))
 		state, exists := lb.services[svcPort]
 		if !exists || state == nil || len(newEndpoints) > 0 {
 			klog.V(0).Infof("Roudrobin: Setting endpoints for %s to %+v", svcPort, newEndpoints)
@@ -270,6 +305,19 @@ func (lb *LoadBalancerRR) OnEndpointsAdd(endpoints *v1.Endpoints) {
 				}
 			}
 			for i := range newEndpoints {
+				if len(PodNames) != 0 {
+					//klog.V(0).Infof("OnEndpointsAdd-IN: PodNames map = %s", PodNames[i])
+					//klog.V(0).Infof("<<< LEN OF PodNames-IN - OnEndpointsAdd  >>>", len(PodNames))
+					//klog.V(0).Infof("<<< LIST newEndpoints-IN - OnEndpointsAdd >>>", newEndpoints[i])
+					//klog.V(0).Infof("<<< LEN OF newEndpoints-IN - OnEndpointsAdd  >>>", len(newEndpoints))
+
+					ConverEndpointToPodName[newEndpoints[i]] = PodNames[i]
+					klog.V(0).Infof("<<< LIST ConverEndpointToPodName-IN - OnEndpointsAdd >>>", ConverEndpointToPodName)
+					klog.V(0).Infof("<<< LEN OF ConverEndpointToPodName-IN - OnEndpointsAdd  >>>", len(ConverEndpointToPodName))
+				}
+				klog.V(0).Infof("<<< LIST CHECKOUT OF RANGE	 - OnEndpointsAdd >>>", ConverEndpointToPodName)
+				//klog.V(0).Infof("<<< LIST ConverEndpointToPodName - OnEndpointsAdd >>>", ConverEndpointToPodName)
+				//klog.V(0).Infof("<<< LEN OF ConverEndpointToPodName - OnEndpointsAdd  >>>", len(ConverEndpointToPodName))
 				if nodenames[i] == hostname {
 					state.localendpoints = append(state.localendpoints, newEndpoints[i])
 				} else {
@@ -280,67 +328,57 @@ func (lb *LoadBalancerRR) OnEndpointsAdd(endpoints *v1.Endpoints) {
 					} else {
 						state.otherEndpoints[nodenames[i]] = &nodeEndpoints{endpoints: []string{newEndpoints[i]}, index: 0}
 					}
-					klog.V(0).Infof(" <<< ADD - state.otherEndpoints %+v OF NODENAMES %+v  >>> ", state.otherEndpoints[nodenames[i]], nodenames[i])
+					//klog.V(0).Infof(" <<< ADD - state.otherEndpoints %+v OF NODENAMES %+v  >>> ", state.otherEndpoints[nodenames[i]], nodenames[i])
 				}
 			}
-			klog.V(0).Infof("LOCAL OnEndpointsAdd: service %s local endpoint %+v and other endpoint %+v", portname, state.localendpoints, state.otherEndpoints)
+			//klog.V(0).Infof("LOCAL OnEndpointsAdd: service %s local endpoint %+v and other endpoint %+v", portname, state.localendpoints, state.otherEndpoints)
 			state.index = 0
 			state.localindex = 0 /*LOCALT*/
 		}
 	}
 }
 
+//func CombinedEndPointAndPodName(oldEndpoints, endpoints *v1.Endpoints){
+//	portsToEndpoints := util.BuildPortsToEndpointsMap(endpoints)
+//	portsToNodeNames, portsToPodNames := util.BuildPortsToNodeNamesMap(endpoints)
+//	ConverEndpointToPodName = map[string]string{}
+//	for portname := range portsToEndpoints {
+//		newEndpoints := portsToEndpoints[portname]
+//		nodenames := portsToNodeNames[portname] //local
+//		PodNames := portsToPodNames[portname]
+//		for i := range newEndpoints {
+//			if len(PodNames) != 0 {
+//				//klog.V(0).Infof("OnEndpointsUpdate-IN: PodNames map = %s", PodNames[i])
+//				//klog.V(0).Infof("<<< LEN OF PodNames-IN - OnEndpointsUpdate  >>>", len(PodNames))
+//				//klog.V(0).Infof("<<< LIST newEndpoints-IN - OnEndpointsUpdate >>>", newEndpoints[i])
+//				//klog.V(0).Infof("<<< LEN OF newEndpoints-IN - OnEndpointsUpdate  >>>", len(newEndpoints))
+//				ConverEndpointToPodName[newEndpoints[i]] = PodNames[i]
+//				klog.V(0).Infof("<<< LIST ConverEndpointToPodName-IN - OnEndpointsUpdate >>>", ConverEndpointToPodName)
+//				klog.V(0).Infof("<<< LEN OF ConverEndpointToPodName-IN - OnEndpointsUpdate  >>>", len(ConverEndpointToPodName))
+//			}
+//		}
+//	}
+//}
+
 func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoints) {
 	portsToEndpoints := util.BuildPortsToEndpointsMap(endpoints)
 	oldPortsToEndpoints := util.BuildPortsToEndpointsMap(oldEndpoints)
 	registeredEndpoints := make(map[proxy.ServicePortName]bool)
 	/*LOCALT*/
-	portsToNodeNames := util.BuildPortsToNodeNamesMap(endpoints)
+	portsToNodeNames, portsToPodNames := util.BuildPortsToNodeNamesMap(endpoints)
 	hostname, err := nodeutil.GetHostname("")
+	//ConverEndpointToPodName = map[string]string{}
 	if err != nil {
 		klog.V(1).Infof("LoadBalancerRR: Couldn't determine hostname")
 	}
 	/*END*/
-
-	/**/
-	config, err0 := clientcmd.BuildConfigFromFlags("", "/home/config")
-	if err0 != nil{
-		panic(err0)
-		klog.V(0).Infof("<<< err0 : %s >>>", err0)
-	}
-	mc, err1 := metrics.NewForConfig(config)
-	if err1 != nil {
-		panic(err1)
-		klog.V(0).Infof("<<< err1 : %s >>>", err1)
-	}
-	podMetrics, _ := mc.MetricsV1beta1().PodMetricses(metav1.NamespaceDefault).List(context.TODO(), metav1.ListOptions{})
-	for _, podMetric := range podMetrics.Items {
-		containerMetrics := podMetric.Containers
-		klog.V(0).Infof("<<< containerMetrics-LEN >>>", len(containerMetrics))
-		MetricSource := podMetric.ObjectMeta
-		for _, containerMetric := range containerMetrics {
-			//containerCPUUsage := containerMetric.Usage.Cpu().String()
-			//containerRAMUsage := containerMetric.Usage.Memory().String()
-			containerName := containerMetric.Name
-			containerCPUUsage_conveter := containerMetric.Usage.Cpu().MilliValue()
-			containerRAMUsage_conveter := containerMetric.Usage.Memory().Value()
-			klog.V(0).Infof("<<< container-Name >>>", containerName)
-			klog.V(0).Infof("<<< container-CPU-Usage_conveter >>>", containerCPUUsage_conveter)
-			klog.V(0).Infof("<<< container-RAM-Usage_conveter >>>", ((containerRAMUsage_conveter)/1024/1024))
-		}
-		klog.V(0).Infof("<<< MetricSource-Name >>>", MetricSource.Name)
-		klog.V(0).Infof("<<< MetricSource-Namespace >>>", MetricSource.Namespace)
-		klog.V(0).Infof("<<< *********************************************************************** >>>")
-
-	}
-
-	/**/
 	lb.lock.Lock()
 	defer lb.lock.Unlock()
 	for portname := range portsToEndpoints {
 		svcPort := proxy.ServicePortName{NamespacedName: types.NamespacedName{Namespace: endpoints.Namespace, Name: endpoints.Name}, Port: portname}
 		newEndpoints := portsToEndpoints[portname]
 		nodenames := portsToNodeNames[portname] //local
+		PodNames := portsToPodNames[portname]
 		state, exists := lb.services[svcPort]
 		curEndpoints := []string{}
 		if state != nil {
@@ -367,6 +405,12 @@ func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoint
 				}
 			}
 			for i := range newEndpoints {
+				if len(PodNames) != 0 {
+					ConverEndpointToPodName[newEndpoints[i]] = PodNames[i]
+					klog.V(0).Infof("<<< LIST ConverEndpointToPodName-IN - OnEndpointsUpdate >>>", ConverEndpointToPodName)
+					klog.V(0).Infof("<<< LEN OF ConverEndpointToPodName-IN - OnEndpointsUpdate  >>>", len(ConverEndpointToPodName))
+				}
+				klog.V(0).Infof("<<< LIST CHECKOUT OF RANGE	 - OnEndpointsUpdate >>>", ConverEndpointToPodName)
 				if nodenames[i] == hostname {
 					state.localendpoints = append(state.localendpoints, newEndpoints[i])
 				} else {
@@ -377,7 +421,7 @@ func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoint
 					} else {
 						state.otherEndpoints[nodenames[i]] = &nodeEndpoints{endpoints: []string{newEndpoints[i]}, index: 0}
 					}
-					klog.V(0).Infof(" <<< UPDATE - state.otherEndpoints %+v OF NODENAMES %+v  >>> -->", state.otherEndpoints[nodenames[i]], nodenames[i])
+					//klog.V(0).Infof(" <<< UPDATE - state.otherEndpoints %+v OF NODENAMES %+v  >>> -->", state.otherEndpoints[nodenames[i]], nodenames[i])
 				}
 			}
 			/*END*/
@@ -448,3 +492,44 @@ func (lb *LoadBalancerRR) CleanupStaleStickySessions(svcPort proxy.ServicePortNa
 		}
 	}
 }
+
+func MonitorMetricCustom(){
+	for {
+		config, err0 := clientcmd.BuildConfigFromFlags("", "/home/config")
+		if err0 != nil {
+			panic(err0)
+			klog.V(0).Infof("<<< err0 : %s >>>", err0)
+		}
+		mc, err1 := metrics.NewForConfig(config)
+		if err1 != nil {
+			panic(err1)
+			klog.V(0).Infof("<<< err1 : %s >>>", err1)
+		}
+		podMetrics, _ := mc.MetricsV1beta1().PodMetricses(metav1.NamespaceDefault).List(context.TODO(), metav1.ListOptions{})
+		for _, podMetric := range podMetrics.Items {
+			containerMetrics := podMetric.Containers
+			klog.V(0).Infof("<<< containerMetrics-LEN >>>", len(containerMetrics))
+			MetricSource := podMetric.ObjectMeta
+			for _, containerMetric := range containerMetrics {
+				//containerCPUUsage := containerMetric.Usage.Cpu().String()
+				//containerRAMUsage := containerMetric.Usage.Memory().String()
+				//	containerName := containerMetric.Name
+				containerCPUUsage_conveter := containerMetric.Usage.Cpu().MilliValue()
+				GlobalVariable_CPU = containerCPUUsage_conveter
+				containerRAMUsage_conveter := (containerMetric.Usage.Memory().Value() / 1024 / 1024)
+				GlobalVariable_RAM = containerRAMUsage_conveter
+				stupid_key := MetricSource.Name
+				//CPUMap[stupid_key] = append(CPUMap[stupid_key], containerCPUUsage_conveter)
+				//RAMMap[stupid_key] = append(RAMMap[stupid_key], containerRAMUsage_conveter)
+				CPUMap[stupid_key] = containerCPUUsage_conveter
+				RAMMap[stupid_key] = containerRAMUsage_conveter
+			}
+		}
+		//klog.V(0).Infof("<<< +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ >>>")
+		//klog.V(0).Infof("<<< Outside ofMetricSource-CPUMap >>>", CPUMap)
+		//klog.V(0).Infof("<<< Outside ofMetricSource-RAMMap >>>", RAMMap)
+		//klog.V(0).Infof("<<< +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ >>>")
+		time.Sleep(30 * time.Second)
+	}
+}
+

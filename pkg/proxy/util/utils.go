@@ -60,12 +60,16 @@ func BuildPortsToEndpointsMap(endpoints *v1.Endpoints) map[string][]string {
 	portsToEndpoints := map[string][]string{}
 	for i := range endpoints.Subsets {
 		ss := &endpoints.Subsets[i]
+		//fmt.Println("Util-BuildPortsToEndpointsMap-ss: ", ss)
 		for i := range ss.Ports {
 			port := &ss.Ports[i]
+			//fmt.Println("Util-BuildPortsToEndpointsMap-port: ", port)
 			for i := range ss.Addresses {
 				addr := &ss.Addresses[i]
+				//fmt.Println("Util-BuildPortsToEndpointsMap-addr: ", addr)
 				if isValidEndpoint(addr.IP, int(port.Port)) {
 					portsToEndpoints[port.Name] = append(portsToEndpoints[port.Name], net.JoinHostPort(addr.IP, strconv.Itoa(int(port.Port))))
+
 				}
 			}
 		}
@@ -75,20 +79,20 @@ func BuildPortsToEndpointsMap(endpoints *v1.Endpoints) map[string][]string {
 
 // BuildPortsToNodeNamesMap builds a map of portname -> all node names for that
 // portname. Explode Endpoints.Subsets[*] into this structure.
-func BuildPortsToNodeNamesMap(endpoints *v1.Endpoints) map[string][]string {
+func BuildPortsToNodeNamesMap(endpoints *v1.Endpoints) (map[string][]string, map[string][]string){
 	portsToNodeNames := map[string][]string{}
 	portsToPodNames := map[string][]string{}
 	var TargetRefName string
 	var TargetRefNamespace string
-
-
-
 	for i := range endpoints.Subsets {
 		ss := &endpoints.Subsets[i]
+		//fmt.Println("Util-BuildPortsToNodeNamesMap-ss: ", ss)
 		for i := range ss.Ports {
 			port := &ss.Ports[i]
+			//fmt.Println("Util-BuildPortsToNodeNamesMap-port: ", port)
 			for i := range ss.Addresses {
 				addr := &ss.Addresses[i]
+				//fmt.Println("Util-BuildPortsToNodeNamesMap-addr: ", addr)
 				if isValidEndpoint(addr.IP, int(port.Port)) {
 					NameOfNode := addr.NodeName
 					if addr.TargetRef != nil{
@@ -103,14 +107,14 @@ func BuildPortsToNodeNamesMap(endpoints *v1.Endpoints) map[string][]string {
 						portsToNodeNames[port.Name] = append(portsToNodeNames[port.Name], *NameOfNode)
 						portsToPodNames[port.Name] = append(portsToPodNames[port.Name], TargetRefName)
 					}
-					fmt.Println("port.Name: ", port.Name)
+					//fmt.Println("Util-BuildPortsToNodeNamesMap-port.Name: ", port.Name)
 					klog.V(0).Infof("PortsTo-NodeNames %v", portsToNodeNames[port.Name])
 					klog.V(0).Infof("PortsTo-PodNames %v", portsToPodNames[port.Name])
 				}
 			}
 		}
 	}
-	return portsToNodeNames
+	return portsToNodeNames, portsToPodNames
 }
 
 
