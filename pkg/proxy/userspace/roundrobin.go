@@ -50,6 +50,11 @@ var(
 	RAMMap = make(map[string]int64)
 	/*Return PodName by Endpoint IP key*/
 	ConverEndpointToPodName = make(map[string]string)
+	LatencyMap = make(map[string]float64)
+	EvalutionOtherEndpoint string
+	MapForOtherEndpoint []string
+	MapForOtherPodName []string
+	MapForOtherNodeName []string
 )
 type affinityState struct {
 	clientIP string
@@ -187,7 +192,9 @@ func (lb *LoadBalancerRR) NextEndpoint_V2(svcPort proxy.ServicePortName, srcAddr
 			}
 		}
 	}
+
 	CPUEvalutionResult, RAMEvalutionResult := LocalNodeResource(CPUMap, RAMMap, ConverEndpointToPodName, state.localendpoints)
+
 	var endpoint string
 	tmpppp := "OFF"
 	if tmpppp == "ON" {
@@ -231,14 +238,17 @@ func (lb *LoadBalancerRR) NextEndpoint_V2(svcPort proxy.ServicePortName, srcAddr
 		//klog.V(0).Infof("<<< hostname ofMetricSource-RAMMap >>>", RAMMap)
 		//klog.V(0).Infof("<<< hostname ofMetricSource-ResultOfCPU: >>>", CPUEvalutionResult)
 		//klog.V(0).Infof("<<< hostname ofMetricSource-ResultOfRAM: >>>", RAMEvalutionResult)
-		klog.V(0).Infof("<<< ********************** NEXT ENDPOINT -V2 *************************** >>>")
-		klog.V(0).Infof("<<< NEXT ENDPOINT: Test OtherEndpoint %s >>>", state.otherEndpoints["worker03"])
-		klog.V(0).Infof("<<< NEXT ENDPOINT: Test OtherEndpoint.endpoint %s and LEN %s>>>", state.otherEndpoints["worker03"].endpoints, len(state.otherEndpoints["worker03"].endpoints))
-		//state.index = (state.index + 1) % len(state.endpoints)
-		klog.V(0).Infof("<<< ********************** NEXT ENDPOINT -V2 *************************** >>>")
+		//klog.V(0).Infof("<<< ********************** NEXT ENDPOINT -V2 *************************** >>>")
+		//klog.V(0).Infof("<<< NEXT ENDPOINT: Test MapForOtherEndpoint %s >>>", MapForOtherEndpoint)
+		//klog.V(0).Infof("<<< NEXT ENDPOINT: Test OtherEndpoint %s >>>", state.otherEndpoints["worker03"])
+		//klog.V(0).Infof("<<< NEXT ENDPOINT: Test OtherEndpoint.endpoint %s and LEN %s>>>", state.otherEndpoints["worker03"].endpoints, len(state.otherEndpoints["worker03"].endpoints))
+		////state.index = (state.index + 1) % len(state.endpoints)
+		//klog.V(0).Infof("<<< ********************** NEXT ENDPOINT -V2 *************************** >>>")
 	}else {
-		endpoint = state.endpoints[state.index]
-		state.index = (state.index + 1) % len(state.endpoints)
+		//EvalutionOtherEndpoint := FindMaxvalue(CPUMap, RAMMap, LatencyMap, ConverEndpointToPodName, MapForOtherEndpoint)
+		endpoint = state.otherEndpoints["worker03"].endpoints[state.otherEndpoints["worker03"].index]
+		//endpoint = state.endpoints[state.index]
+		state.otherEndpoints["worker03"].index = (state.otherEndpoints["worker03"].index + 1) % len(state.otherEndpoints["worker03"].endpoints)
 	}
 	/*END*/
 	if sessionAffinityEnabled {
@@ -256,7 +266,87 @@ func (lb *LoadBalancerRR) NextEndpoint_V2(svcPort proxy.ServicePortName, srcAddr
 	klog.V(0).Infof("<<< NEXT-ENDPOINT: %q >>>", endpoint)
 	return endpoint, nil
 }
+func FindMaxvalue(CPUMapForMax map[string]int64, RAMMapForMax map[string]int64, LatencyMapForMin map[string]float64, ConvertIPtoPodName map[string]string, EndPontIP_map []string) string {
+	var(
+		tmp_CPU_TOTAL float64
+		tmp_RAM_TOTAL float64
+		tmp_Latency_Best float64
+		tmp_Latency_Sumary float64
+		Evalution_Result_key float64
+		FINAL_RESULT string
+		ListPodNameOfLatecy []string
+	)
+	DevicedValue_CPU := make(map[string]float64)
+	DevicedValue_RAM := make(map[string]float64)
+	DevicedValue_Latency := make(map[string]float64)
+	pod_Choose := make(map[float64]string)
+	Other_LatencyMap := make(map[string]float64)
 
+
+	maxvalue_CPU := CPUMapForMax[ConvertIPtoPodName[EndPontIP_map[0]]]
+	maxvalue_RAM := RAMMapForMax[ConvertIPtoPodName[EndPontIP_map[0]]]
+	MinValue_Latency := LatencyMapForMin[ConvertIPtoPodName[EndPontIP_map[0]]]
+
+	for tmpCPU := range EndPontIP_map{
+		if CPUMapForMax[ConvertIPtoPodName[EndPontIP_map[tmpCPU]]] > maxvalue_CPU{
+			maxvalue_CPU = CPUMapForMax[ConvertIPtoPodName[EndPontIP_map[tmpCPU]]]
+		}
+	}
+
+	for tmpRAM := range EndPontIP_map{
+		if RAMMapForMax[ConvertIPtoPodName[EndPontIP_map[tmpRAM]]] > maxvalue_RAM{
+			maxvalue_RAM = RAMMapForMax[ConvertIPtoPodName[EndPontIP_map[tmpRAM]]]
+		}
+	}
+
+	for tmpLatency := range EndPontIP_map{
+		if LatencyMapForMin[ConvertIPtoPodName[EndPontIP_map[tmpLatency]]] < MinValue_Latency{
+			MinValue_Latency = LatencyMapForMin[ConvertIPtoPodName[EndPontIP_map[tmpLatency]]]
+		}
+	}
+
+	for tmp02 := range EndPontIP_map{
+		DevicedValue_Latency[ConvertIPtoPodName[EndPontIP_map[tmp02]]] = float64(MinValue_Latency)/float64(LatencyMapForMin[ConvertIPtoPodName[EndPontIP_map[tmp02]]])
+		DevicedValue_RAM[ConvertIPtoPodName[EndPontIP_map[tmp02]]] = float64(RAMMapForMax[ConvertIPtoPodName[EndPontIP_map[tmp02]]])/float64(maxvalue_RAM)
+		DevicedValue_CPU[ConvertIPtoPodName[EndPontIP_map[tmp02]]] = float64(CPUMapForMax[ConvertIPtoPodName[EndPontIP_map[tmp02]]])/float64(maxvalue_CPU)
+	}
+
+	for tmpTOTAL := range EndPontIP_map {
+		if DevicedValue_CPU[ConvertIPtoPodName[EndPontIP_map[tmpTOTAL]]] == 1 {
+			tmp_CPU_TOTAL = DevicedValue_CPU[ConvertIPtoPodName[EndPontIP_map[tmpTOTAL]]] + DevicedValue_RAM[ConvertIPtoPodName[EndPontIP_map[tmpTOTAL]]] + DevicedValue_Latency[ConvertIPtoPodName[EndPontIP_map[tmpTOTAL]]]
+			pod_Choose[tmp_CPU_TOTAL] = ConvertIPtoPodName[EndPontIP_map[tmpTOTAL]]
+		}
+		if DevicedValue_RAM[ConvertIPtoPodName[EndPontIP_map[tmpTOTAL]]] == 1 {
+			tmp_RAM_TOTAL = DevicedValue_CPU[ConvertIPtoPodName[EndPontIP_map[tmpTOTAL]]] + DevicedValue_RAM[ConvertIPtoPodName[EndPontIP_map[tmpTOTAL]]] + DevicedValue_Latency[ConvertIPtoPodName[EndPontIP_map[tmpTOTAL]]]
+			pod_Choose[tmp_RAM_TOTAL] = ConvertIPtoPodName[EndPontIP_map[tmpTOTAL]]
+		}
+		if DevicedValue_Latency[ConvertIPtoPodName[EndPontIP_map[tmpTOTAL]]] == 1 {
+			tmp_Latency_Sumary = DevicedValue_CPU[ConvertIPtoPodName[EndPontIP_map[tmpTOTAL]]] + DevicedValue_RAM[ConvertIPtoPodName[EndPontIP_map[tmpTOTAL]]] + DevicedValue_Latency[ConvertIPtoPodName[EndPontIP_map[tmpTOTAL]]]
+			Other_LatencyMap[ConvertIPtoPodName[EndPontIP_map[tmpTOTAL]]] = tmp_Latency_Sumary
+			ListPodNameOfLatecy = append(ListPodNameOfLatecy, ConvertIPtoPodName[EndPontIP_map[tmpTOTAL]])
+			tmp_max := Other_LatencyMap[ListPodNameOfLatecy[0]]
+			for tmp02 := range ListPodNameOfLatecy {
+				if Other_LatencyMap[ListPodNameOfLatecy[tmp02]] > tmp_max {
+					tmp_max = Other_LatencyMap[ListPodNameOfLatecy[tmp02]]
+					pod_Choose[tmp_max] = ListPodNameOfLatecy[tmp02]
+					tmp_Latency_Best = tmp_max
+				}
+			}
+		}
+	}
+
+	Total_Evalution_key := []float64{tmp_CPU_TOTAL, tmp_RAM_TOTAL, tmp_Latency_Best}
+	tmp_Total_Evalution_key := Total_Evalution_key[0]
+	for tmp := range Total_Evalution_key {
+		if Total_Evalution_key[tmp] >= tmp_Total_Evalution_key {
+			Evalution_Result_key = Total_Evalution_key[tmp]
+			fmt.Println("Total_Evalution_key", Total_Evalution_key)
+		}
+	}
+	fmt.Println("pod_Choose", pod_Choose)
+	FINAL_RESULT = pod_Choose[Evalution_Result_key]
+	return FINAL_RESULT
+}
 /* This function is created by NGUYEN QUANG MINH - Support calculating Finnal result by CPU/RAM resource of Local Worker-Node*/
 /*Input xxx*/
 func LocalNodeResource(MapOfCPU map[string]int64, MapOfRAM map[string]int64, ConverEToNN map[string]string, EndpointMap []string) (bool,bool){
@@ -424,6 +514,9 @@ func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoint
 
 			/**LOCAL**/
 			state.localendpoints = nil
+			MapForOtherEndpoint = nil
+			MapForOtherNodeName = nil
+			MapForOtherPodName = nil
 			for j := range newEndpoints {
 				ep, ok := state.otherEndpoints[nodenames[j]]
 				klog.V(0).Infof("<<< ep-check: >>> -->", ep)
@@ -445,7 +538,19 @@ func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoint
 					} else {
 						state.otherEndpoints[nodenames[i]] = &nodeEndpoints{endpoints: []string{newEndpoints[i]}, index: 0}
 					}
-					klog.V(0).Infof("OnEndpointsUpdate: COUTER %s", i)
+					hellu := state.endpoints
+					klog.V(0).Infof("OnEndpointsUpdate: Get All OtherEndpoint %s", hellu)
+					klog.V(0).Infof("OnEndpointsUpdate: hostname %s", hostname)
+					MapForOtherEndpoint = append(MapForOtherEndpoint, newEndpoints[i])
+					MapForOtherNodeName = append(MapForOtherNodeName, nodenames[i])
+					klog.V(0).Infof("OnEndpointsUpdate: Get All MapForOtherEndpoint %s", MapForOtherEndpoint)
+					klog.V(0).Infof("OnEndpointsUpdate: Get All MapForOtherNodeName %s", MapForOtherNodeName)
+					if len(PodNames) != 0 {
+						MapForOtherPodName = append(MapForOtherPodName, PodNames[i])
+						klog.V(0).Infof("OnEndpointsUpdate: Get All MapForOtherPodName %s", MapForOtherPodName)
+						abc := LatencyListWithPodName(hostname, nodenames[i], PodNames[i])
+						klog.V(0).Infof("OnEndpointsUpdate: Get abc after ", abc)
+					}
 					klog.V(0).Infof(" <<< OnEndpointsUpdate - state.otherEndpoints[nodenames[i]] %+v OF NODENAMES %+v  >>> ", state.otherEndpoints[nodenames[i]], nodenames[i])
 					klog.V(0).Infof(" <<< OnEndpointsUpdate - state.otherEndpoints[nodenames[i]].endpoint %+v OF NODENAMES %+v  >>> ", state.otherEndpoints[nodenames[i]].endpoints, nodenames[i])
 				}
@@ -465,6 +570,25 @@ func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoint
 			lb.resetService(svcPort)
 		}
 	}
+}
+
+func LatencyListWithPodName(LocalHostName string, map_NodeName string, map_PodName string) map[string]float64{
+	MatrixLatency := make(map[string]map[string]float64)
+	MatrixLatency["worker01"] = map[string]float64{
+		"worker02": 4,
+		"worker03": 8,
+	}
+	MatrixLatency["worker02"] = map[string]float64{
+		"worker01": 4,
+		"worker03": 3,
+	}
+	MatrixLatency["worker03"] = map[string]float64{
+		"worker01": 8,
+		"worker02": 3,
+	}
+	LatencyMap[map_PodName] = MatrixLatency[LocalHostName][map_NodeName]
+	klog.V(0).Infof("AAAAAAAAAAAAAAAAAAAAAAAAAAAAA", LatencyMap)
+	return LatencyMap
 }
 
 func (lb *LoadBalancerRR) resetService(svcPort proxy.ServicePortName) {
@@ -520,6 +644,8 @@ func (lb *LoadBalancerRR) CleanupStaleStickySessions(svcPort proxy.ServicePortNa
 		}
 	}
 }
+
+
 
 func MonitorMetricCustom(RangeFor []string){
 	for range RangeFor{
