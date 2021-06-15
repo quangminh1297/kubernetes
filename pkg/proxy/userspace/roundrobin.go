@@ -262,7 +262,7 @@ func (lb *LoadBalancerRR) NextEndpoint_V2(svcPort proxy.ServicePortName, srcAddr
 		klog.V(0).Infof("<<< ENDPOINT: %q >>>", endpoint)
 		klog.V(0).Infof("<<< svcPort.Name-Before filter: %q >>>", svcPort.Name)
 		/*Filter svc without metrics-server *** Other Endpoint apply for only NameSpace Default && svcName: nginx-nodeport-xx*/
-		if strings.Contains(svcPort.Name, "nginx-nodeport-11") == true{
+		if strings.Contains(svcPort.Name, "nginx-nodeport") == true{
 			klog.V(0).Infof("<<< svcPort.Name-After filter: %q >>>", svcPort.Name)
 			endpoint = state.otherEndpoints[ConverPodNameToNodeName[EvalutionOtherEndpoint]].endpoints[state.otherEndpoints[ConverPodNameToNodeName[EvalutionOtherEndpoint]].index]
 			klog.V(0).Infof("<<< Debug003 >>>")
