@@ -711,12 +711,15 @@ func MonitorMetricCustom(LimitLoop []string){
 			klog.V(0).Infof("<<< err1 : %s >>>", err1)
 		}
 		klog.V(0).Infof(" Metrics DEBUG 03")
-		podMetrics, _ := mc.MetricsV1beta1().PodMetricses(metav1.NamespaceDefault).List(context.TODO(), metav1.ListOptions{})
+		podMetrics, MetricError := mc.MetricsV1beta1().PodMetricses(metav1.NamespaceDefault).List(context.TODO(), metav1.ListOptions{})
+		if MetricError != nil {
+			klog.V(0).Infof("<<< MetricError >>>", MetricError)
+		}
+		klog.V(0).Infof(" ++++++++Metrics Metric_Error++++++++", MetricError)
 		klog.V(0).Infof(" Metrics DEBUG 04")
-		klog.V(0).Infof(" podMetrics.Items", podMetrics.Items)
-		klog.V(0).Infof(" podMetrics", podMetrics)
-		fmt.Println(" ---------------podMetrics.Items", podMetrics.Items)
-		fmt.Println(" ---------------podMetrics", podMetrics)
+		//fmt.Println(" ---------------podMetrics.Items", podMetrics.Items)
+		//fmt.Println(" ---------------podMetrics", podMetrics)
+		/*podMetrics.Items Get all variable in package of MetricsV1beta1().PodMetricses*/
 		for _, podMetric := range podMetrics.Items {
 			klog.V(0).Infof(" Metrics DEBUG 05")
 			containerMetrics := podMetric.Containers
@@ -740,7 +743,7 @@ func MonitorMetricCustom(LimitLoop []string){
 		klog.V(0).Infof("<<< Outside ofMetricSource-CPUMap >>>", CPUMap)
 		klog.V(0).Infof("<<< Outside ofMetricSource-RAMMap >>>", RAMMap)
 		klog.V(0).Infof("<<< +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ >>>")
-		time.Sleep(5 * time.Second)
+		time.Sleep(60 * time.Second)
 	}
 }
 
