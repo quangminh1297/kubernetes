@@ -64,6 +64,9 @@ var(
 	RAMEvalutionResult bool
 	CPU float64
 	RAM float64
+	ScoreList = make(map[string]float64)
+	FinalScore float64
+	Printcheck string
 )
 type affinityState struct {
 	clientIP string
@@ -203,27 +206,29 @@ func (lb *LoadBalancerRR) NextEndpoint_V2(svcPort proxy.ServicePortName, srcAddr
 			}
 		}
 	}
+	klog.V(0).Infof("***DEBUG 003***")
+	//var endpoint string
+	endpoint := state.endpoints[state.index]
+	state.index = (state.index + 1) % len(state.endpoints)
 	if strings.Contains(svcPort.Name, "nginx-nodeport") == true {
 		/*CHECK ALL OUTPUT ARGUMENT*/
-		klog.V(0).Infof("***DEBUG 003***")
+		klog.V(0).Infof("***DEBUG 004***")
 		EvalutionOtherEndpoint, _, _ = FindMaxvalue(CPUMap, RAMMap, LatencyMap, ConverEndpointToPodName, MapForOtherEndpoint)
-		_, ScoreList, FinalScore := FindMaxvalue(CPUMap, RAMMap, LatencyMap, ConverEndpointToPodName, MapForOtherEndpoint)
+		_, ScoreList, FinalScore = FindMaxvalue(CPUMap, RAMMap, LatencyMap, ConverEndpointToPodName, MapForOtherEndpoint)
 		CPUEvalutionResult, RAMEvalutionResult, CPU, RAM = LocalNodeResource(CPUMap, RAMMap, ConverEndpointToPodName, state.localendpoints) //(CPU,RAM)
-		klog.V(0).Infof("********************************************************************")
-		klog.V(0).Infof("<<< EvalutionOtherEndpoint >>>", EvalutionOtherEndpoint)
-		klog.V(0).Infof("<<< ScoreList >>>", ScoreList)
-		klog.V(0).Infof("<<< FinalScore >>>", FinalScore)
-		klog.V(0).Infof("<<< CPUEvalutionResult >>>", CPUEvalutionResult)
-		klog.V(0).Infof("<<< RAMEvalutionResult >>>", RAMEvalutionResult)
-		klog.V(0).Infof("<<< CPU >>>", CPU)
-		klog.V(0).Infof("<<< RAM >>>", RAM)
-		klog.V(0).Infof("<<< ********************** NEXT ENDPOINT *************************** >>>")
+		//klog.V(0).Infof("********************************************************************")
+		//klog.V(0).Infof("<<< EvalutionOtherEndpoint >>>", EvalutionOtherEndpoint)
+		//klog.V(0).Infof("<<< ScoreList >>>", ScoreList)
+		//klog.V(0).Infof("<<< FinalScore >>>", FinalScore)
+		//klog.V(0).Infof("<<< CPUEvalutionResult >>>", CPUEvalutionResult)
+		//klog.V(0).Infof("<<< RAMEvalutionResult >>>", RAMEvalutionResult)
+		//klog.V(0).Infof("<<< CPU >>>", CPU)
+		//klog.V(0).Infof("<<< RAM >>>", RAM)
+		//klog.V(0).Infof("<<< ********************** NEXT ENDPOINT *************************** >>>")
 		/**/
 	}
-	klog.V(0).Infof("***DEBUG 004***")
-	var endpoint string
-
 	klog.V(0).Infof("***DEBUG 006***")
+	klog.V(0).Infof("len(state.localendpoints)", len(state.localendpoints))
 	if len(state.localendpoints) != 0 && CPUEvalutionResult == true && RAMEvalutionResult == true {
 		klog.V(0).Infof("***DEBUG 007***")
 		endpoint = state.localendpoints[state.localindex]
@@ -243,20 +248,23 @@ func (lb *LoadBalancerRR) NextEndpoint_V2(svcPort proxy.ServicePortName, srcAddr
 	} else {
 		//EvalutionOtherEndpoint := FindMaxvalue(CPUMap, RAMMap, LatencyMap, ConverEndpointToPodName, MapForOtherEndpoint)
 		klog.V(0).Infof("***DEBUG 010***")
-		endpoint = state.endpoints[state.index]
-		state.index = (state.index + 1) % len(state.endpoints)
+		//endpoint = state.endpoints[state.index]
+		//state.index = (state.index + 1) % len(state.endpoints)
 		if strings.Contains(svcPort.Name, "nginx-nodeport") == true {
 			klog.V(0).Infof("***DEBUG MEGAXXXXXXXXXXXXXX***")
-			klog.V(0).Infof("<<< svcPort.Name-After filter: %q >>>", svcPort.Name)
+			//klog.V(0).Infof("<<< svcPort.Name-After filter: %q >>>", svcPort.Name)
 			klog.V(0).Infof("EvalutionOtherEndpoint: ", EvalutionOtherEndpoint)
-			klog.V(0).Infof("ConverPodNameToNodeName[EvalutionOtherEndpoint]: ", ConverPodNameToNodeName[EvalutionOtherEndpoint])
-			klog.V(0).Infof("state.otherEndpoints: ", state.otherEndpoints)
-			klog.V(0).Infof("Check Index of Func-22: ", endpoint)
+			//klog.V(0).Infof("ConverPodNameToNodeName[EvalutionOtherEndpoint]: ", ConverPodNameToNodeName[EvalutionOtherEndpoint])
+			//klog.V(0).Infof("state.otherEndpoints: ", state.otherEndpoints)
+			//klog.V(0).Infof("Check Index of Func-22: ", endpoint)
 			if len(EvalutionOtherEndpoint) != 0 {
-				klog.V(0).Infof("EvalutionOtherEndpoint-MEGAMAL: ", EvalutionOtherEndpoint)
-				klog.V(0).Infof("ConverPodNameToNodeName[EvalutionOtherEndpoint]:-MEGAMAL ", ConverPodNameToNodeName[EvalutionOtherEndpoint])
-				//endpoint = state.otherEndpoints[ConverPodNameToNodeName[EvalutionOtherEndpoint]].endpoints[state.otherEndpoints[ConverPodNameToNodeName[EvalutionOtherEndpoint]].index]
-				//state.otherEndpoints[ConverPodNameToNodeName[EvalutionOtherEndpoint]].index = (state.otherEndpoints[ConverPodNameToNodeName[EvalutionOtherEndpoint]].index + 1) % len(state.otherEndpoints[ConverPodNameToNodeName[EvalutionOtherEndpoint]].endpoints)
+				klog.V(0).Infof("***DEBUG 011***")
+				//klog.V(0).Infof("EvalutionOtherEndpoint-MEGAMAL: ", EvalutionOtherEndpoint)
+				//klog.V(0).Infof("ConverPodNameToNodeName[EvalutionOtherEndpoint]:-MEGAMAL ", ConverPodNameToNodeName[EvalutionOtherEndpoint])
+				endpoint = state.otherEndpoints[ConverPodNameToNodeName[EvalutionOtherEndpoint]].endpoints[state.otherEndpoints[ConverPodNameToNodeName[EvalutionOtherEndpoint]].index]
+				klog.V(0).Infof("***DEBUG 012***")
+				state.otherEndpoints[ConverPodNameToNodeName[EvalutionOtherEndpoint]].index = (state.otherEndpoints[ConverPodNameToNodeName[EvalutionOtherEndpoint]].index + 1) % len(state.otherEndpoints[ConverPodNameToNodeName[EvalutionOtherEndpoint]].endpoints)
+				klog.V(0).Infof("***DEBUG 013***")
 			}
 			/**/
 			//ep, ok := state.otherEndpoints[nodenames[i]]
@@ -267,10 +275,10 @@ func (lb *LoadBalancerRR) NextEndpoint_V2(svcPort proxy.ServicePortName, srcAddr
 			//	state.otherEndpoints[nodenames[i]] = &nodeEndpoints{endpoints: []string{newEndpoints[i]}, index: 0}
 			//}
 			/**/
-			klog.V(0).Infof("Check Index of Func-22: ", endpoint)
+			//klog.V(0).Infof("Check Index of Func-22: ", endpoint)
 			klog.V(0).Infof("---DEBUG MEGAzzzzzzzzzzzzzzz---")
 		}
-		klog.V(0).Infof("***DEBUG 011***")
+		klog.V(0).Infof("***DEBUG 014***")
 	}
 	/*END*/
 	if sessionAffinityEnabled {
@@ -285,7 +293,8 @@ func (lb *LoadBalancerRR) NextEndpoint_V2(svcPort proxy.ServicePortName, srcAddr
 		affinity.clientIP = ipaddr
 		klog.V(0).Infof("Updated affinity key %s: %#v", ipaddr, state.affinity.affinityMap[ipaddr])
 	}
-	//klog.V(0).Infof("<<< NEXT-ENDPOINT: %q >>>", endpoint)
+	klog.V(0).Infof("<<< -----------------------NEXT-ENDPOINT: %q ----------------------------------------->>>", endpoint)
+	Printcheck = endpoint
 	//go PrintLogPerMinutes(state.endpoints, CPU, RAM, CPUMap, RAMMap, CPUEvalutionResult, RAMEvalutionResult, EvalutionOtherEndpoint, ScoreList, FinalScore, endpoint)
 	return endpoint, nil
 }
@@ -304,7 +313,7 @@ func PrintLogPerMinutes(RangeOfEndpoint []string, PersenOfCPU float64, PersenOfR
 		klog.V(0).Infof("*** Best Score: ", score01)
 		klog.V(0).Infof("*** READY ENDPOINT FOR OVERLOAD:", EvalutionOtherEndpoint)
 		klog.V(0).Infof("<<< ********************** NEXT ENDPOINT*************************** >>>")
-		time.Sleep(20 * time.Second)
+		//time.Sleep(20 * time.Second)
 	}
 }
 func FindMaxvalue(CPUMapForMax map[string]int64, RAMMapForMax map[string]int64, LatencyMapForMin map[string]float64, ConvertIPtoPodName map[string]string, EndPontIP_map []string) (string, map[string]float64, float64) {
@@ -386,7 +395,7 @@ func LocalNodeResource(MapOfCPU map[string]int64, MapOfRAM map[string]int64, Con
 	)
 
 	NumberOfObject := len(EndpointMap)
-	Limitation_Value_CPU := 100
+	Limitation_Value_CPU := 50
 	Limitation_Value_RAM := 128
 	/*Process for Average*/
 	for tmp1 := range (EndpointMap){
@@ -484,7 +493,7 @@ func (lb *LoadBalancerRR) OnEndpointsAdd(endpoints *v1.Endpoints) {
 				}
 			}
 			for i := range newEndpoints {
-				if len(PodNames) != 0 {
+				if len(PodNames) != 0 && strings.Contains(PodNames[i], "minh-deployment") == true{
 					ConverEndpointToPodName[newEndpoints[i]] = PodNames[i]
 					ConverPodNameToNodeName[PodNames[i]] = nodenames[i]
 				}
@@ -529,7 +538,7 @@ func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoint
 		state, exists := lb.services[svcPort]
 		curEndpoints := []string{}
 		//go MonitorMetricCustom(newEndpoints)
-		go MonitorMetricCustom(newEndpoints)
+		go MonitorMetricCustom(PodNames)
 		if state != nil {
 			curEndpoints = state.endpoints
 		}
@@ -556,7 +565,7 @@ func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoint
 				}
 			}
 			for i := range newEndpoints {
-				if len(PodNames) != 0 {
+				if len(PodNames) != 0 && strings.Contains(PodNames[i], "minh-deployment") == true{
 					ConverEndpointToPodName[newEndpoints[i]] = PodNames[i]
 					ConverPodNameToNodeName[PodNames[i]] = nodenames[i]
 				}
@@ -573,14 +582,15 @@ func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoint
 					hellu := state.endpoints
 					klog.V(0).Infof("OnEndpointsUpdate: Get All OtherEndpoint %s", hellu)
 					klog.V(0).Infof("OnEndpointsUpdate: hostname %s", hostname)
-					MapForOtherEndpoint = append(MapForOtherEndpoint, newEndpoints[i])
-					MapForOtherNodeName = append(MapForOtherNodeName, nodenames[i])
-					klog.V(0).Infof("OnEndpointsUpdate: Get All MapForOtherEndpoint %s", MapForOtherEndpoint)
-					klog.V(0).Infof("OnEndpointsUpdate: Get All MapForOtherNodeName %s", MapForOtherNodeName)
-					if len(PodNames) != 0 {
+
+					if len(PodNames) != 0 && len(newEndpoints[i]) != 0{
 						if strings.Contains(PodNames[i], "minh-deployment") == true{
 							MapForOtherPodName = append(MapForOtherPodName, PodNames[i])
 							klog.V(0).Infof("OnEndpointsUpdate: Get All MapForOtherPodName %s", MapForOtherPodName)
+							MapForOtherEndpoint = append(MapForOtherEndpoint, newEndpoints[i])
+							MapForOtherNodeName = append(MapForOtherNodeName, nodenames[i])
+							klog.V(0).Infof("OnEndpointsUpdate: Get All MapForOtherEndpoint %s", MapForOtherEndpoint)
+							klog.V(0).Infof("OnEndpointsUpdate: Get All MapForOtherNodeName %s", MapForOtherNodeName)
 							abc := LatencyListWithPodName(hostname, nodenames[i], PodNames[i])
 							klog.V(0).Infof("OnEndpointsUpdate: Get LatencyListWithPodName ", abc)
 						}
@@ -696,8 +706,8 @@ func (lb *LoadBalancerRR) CleanupStaleStickySessions(svcPort proxy.ServicePortNa
 
 
 func MonitorMetricCustom(LimitLoop []string){
-	for range LimitLoop{
-		//for{
+	//for range LimitLoop{
+	for{
 		klog.V(0).Infof(" Metrics DEBUG 01")
 		config, err0 := clientcmd.BuildConfigFromFlags("", "/home/config")
 		klog.V(0).Infof(" Metrics DEBUG 02")
@@ -715,7 +725,6 @@ func MonitorMetricCustom(LimitLoop []string){
 		if MetricError != nil {
 			klog.V(0).Infof("<<< MetricError >>>", MetricError)
 		}
-		klog.V(0).Infof(" ++++++++Metrics Metric_Error++++++++", MetricError)
 		klog.V(0).Infof(" Metrics DEBUG 04")
 		//fmt.Println(" ---------------podMetrics.Items", podMetrics.Items)
 		//fmt.Println(" ---------------podMetrics", podMetrics)
@@ -734,7 +743,7 @@ func MonitorMetricCustom(LimitLoop []string){
 				containerRAMUsage_conveter := (containerMetric.Usage.Memory().Value() / 1024 / 1024)
 				stupid_key := MetricSource.Name
 				klog.V(0).Infof(" Metrics DEBUG 07")
-				CPUMap[stupid_key] = (100 - containerCPUUsage_conveter)
+				CPUMap[stupid_key] = (50 - containerCPUUsage_conveter)
 				RAMMap[stupid_key] = (128 - containerRAMUsage_conveter)
 				klog.V(0).Infof("<<< MetricSource-stupid_key >>>", stupid_key)
 			}
@@ -743,6 +752,7 @@ func MonitorMetricCustom(LimitLoop []string){
 		klog.V(0).Infof("<<< Outside ofMetricSource-CPUMap >>>", CPUMap)
 		klog.V(0).Infof("<<< Outside ofMetricSource-RAMMap >>>", RAMMap)
 		klog.V(0).Infof("<<< +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ >>>")
+		go PrintLogPerMinutes(LimitLoop, CPU, RAM, CPUMap, RAMMap, CPUEvalutionResult, RAMEvalutionResult, EvalutionOtherEndpoint, ScoreList, FinalScore, Printcheck)
 		time.Sleep(60 * time.Second)
 	}
 }
