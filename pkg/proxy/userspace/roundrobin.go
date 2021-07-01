@@ -67,6 +67,10 @@ var(
 	ScoreList = make(map[string]float64)
 	FinalScore float64
 	Printcheck string
+
+	/*Debug 0107*/
+	CounterService int64
+	MetricsLocker sync.RWMutex
 )
 type affinityState struct {
 	clientIP string
@@ -87,6 +91,7 @@ type LoadBalancerRR struct {
 	lock     sync.RWMutex
 	services map[proxy.ServicePortName]*balancerState
 }
+
 
 // Ensure this implements LoadBalancer.
 var _ LoadBalancer = &LoadBalancerRR{}
@@ -123,7 +128,7 @@ func NewLoadBalancerRR() *LoadBalancerRR {
 }
 
 func (lb *LoadBalancerRR) NewService(svcPort proxy.ServicePortName, affinityType v1.ServiceAffinity, ttlSeconds int) error {
-	klog.V(4).Infof("LoadBalancerRR NewService %q", svcPort)
+	klog.V(0).Infof("LoadBalancerRR NewService %q", svcPort)
 	lb.lock.Lock()
 	defer lb.lock.Unlock()
 	lb.newServiceInternal(svcPort, affinityType, ttlSeconds)
@@ -183,6 +188,7 @@ func (lb *LoadBalancerRR) NextEndpoint_V2(svcPort proxy.ServicePortName, srcAddr
 	if len(state.endpoints) == 0 {
 		return "", ErrMissingEndpoints
 	}
+
 	klog.V(2).Infof("NextEndpoint for service %q, srcAddr=%v: endpoints: %+v", svcPort, srcAddr, state.endpoints)
 	sessionAffinityEnabled := isSessionAffinity(&state.affinity)
 	klog.V(0).Infof("***DEBUG 001***")
@@ -211,19 +217,20 @@ func (lb *LoadBalancerRR) NextEndpoint_V2(svcPort proxy.ServicePortName, srcAddr
 	endpoint := state.endpoints[state.index]
 	state.index = (state.index + 1) % len(state.endpoints)
 	if strings.Contains(svcPort.Name, "nginx-nodeport") == true {
+		CPUMap, RAMMap  = MonitorMetricCustom()
 		/*CHECK ALL OUTPUT ARGUMENT*/
 		klog.V(0).Infof("***DEBUG 004***")
 		EvalutionOtherEndpoint, _, _ = FindMaxvalue(CPUMap, RAMMap, LatencyMap, ConverEndpointToPodName, MapForOtherEndpoint)
 		_, ScoreList, FinalScore = FindMaxvalue(CPUMap, RAMMap, LatencyMap, ConverEndpointToPodName, MapForOtherEndpoint)
 		CPUEvalutionResult, RAMEvalutionResult, CPU, RAM = LocalNodeResource(CPUMap, RAMMap, ConverEndpointToPodName, state.localendpoints) //(CPU,RAM)
 		//klog.V(0).Infof("********************************************************************")
-		klog.V(0).Infof("<<< EvalutionOtherEndpoint >>>", EvalutionOtherEndpoint)
-		klog.V(0).Infof("<<< ScoreList >>>", ScoreList)
-		klog.V(0).Infof("<<< FinalScore >>>", FinalScore)
-		klog.V(0).Infof("<<< CPUEvalutionResult >>>", CPUEvalutionResult)
-		klog.V(0).Infof("<<< RAMEvalutionResult >>>", RAMEvalutionResult)
-		klog.V(0).Infof("<<< CPU >>>", CPU)
-		klog.V(0).Infof("<<< RAM >>>", RAM)
+		//klog.V(0).Infof("<<< EvalutionOtherEndpoint >>>", EvalutionOtherEndpoint)
+		//klog.V(0).Infof("<<< ScoreList >>>", ScoreList)
+		//klog.V(0).Infof("<<< FinalScore >>>", FinalScore)
+		//klog.V(0).Infof("<<< CPUEvalutionResult >>>", CPUEvalutionResult)
+		//klog.V(0).Infof("<<< RAMEvalutionResult >>>", RAMEvalutionResult)
+		//klog.V(0).Infof("<<< CPU >>>", CPU)
+		//klog.V(0).Infof("<<< RAM >>>", RAM)
 		//klog.V(0).Infof("<<< ********************** NEXT ENDPOINT *************************** >>>")
 		/**/
 	}
@@ -297,7 +304,22 @@ func (lb *LoadBalancerRR) NextEndpoint_V2(svcPort proxy.ServicePortName, srcAddr
 	}
 	klog.V(0).Infof("<<< -----------------------NEXT-ENDPOINT: %q ----------------------------------------->>>", endpoint)
 	Printcheck = endpoint
+	CounterService = CounterService + 1
+	if CounterService > 60{
+		CounterService = 0
+	}
+	klog.V(0).Infof("*********************************************")
+	klog.V(0).Infof("****************CounterService: ", CounterService)
+	klog.V(0).Infof("*********************************************")
+	klog.V(0).Infof("<<< EvalutionOtherEndpoint >>>", EvalutionOtherEndpoint)
+	klog.V(0).Infof("<<< ScoreList >>>", ScoreList)
+	klog.V(0).Infof("<<< FinalScore >>>", FinalScore)
+	klog.V(0).Infof("<<< CPUEvalutionResult >>>", CPUEvalutionResult)
+	klog.V(0).Infof("<<< RAMEvalutionResult >>>", RAMEvalutionResult)
+	klog.V(0).Infof("<<< CPU >>>", CPU)
+	klog.V(0).Infof("<<< RAM >>>", RAM)
 	//go PrintLogPerMinutes(state.endpoints, CPU, RAM, CPUMap, RAMMap, CPUEvalutionResult, RAMEvalutionResult, EvalutionOtherEndpoint, ScoreList, FinalScore, endpoint)
+	klog.V(0).Infof("<<< -----------------------NEXT-ENDPOINT-Printcheck: %q ----------------------------------------->>>", Printcheck)
 	return endpoint, nil
 }
 func PrintLogPerMinutes(RangeOfEndpoint []string, PersenOfCPU float64, PersenOfRAM float64, CPUMap map[string]int64, RAMMap map[string]int64, ResultCPU bool, ResultRAM bool, EvalutionOtherEndpoint string, ListOfScore map[string]float64, score01 float64, CurrentEndpoint string){
@@ -545,7 +567,7 @@ func (lb *LoadBalancerRR) OnEndpointsUpdate(oldEndpoints, endpoints *v1.Endpoint
 		state, exists := lb.services[svcPort]
 		curEndpoints := []string{}
 		//go MonitorMetricCustom(newEndpoints)
-		go MonitorMetricCustom(newEndpoints)
+
 		if state != nil {
 			curEndpoints = state.endpoints
 		}
@@ -715,12 +737,12 @@ func (lb *LoadBalancerRR) CleanupStaleStickySessions(svcPort proxy.ServicePortNa
 }
 
 
-func MonitorMetricCustom(LimitLoop []string){
-	//for range LimitLoop{
-	for{
-		klog.V(0).Infof(" Metrics DEBUG 01")
+func MonitorMetricCustom() (map[string]int64, map[string]int64){
+	//for range LimitLoop{ LimitLoop []string
+	//for{
+		klog.V(8).Infof(" Metrics DEBUG 01")
 		config, err0 := clientcmd.BuildConfigFromFlags("", "/home/config")
-		klog.V(0).Infof(" Metrics DEBUG 02")
+		klog.V(8).Infof(" Metrics DEBUG 02")
 		if err0 != nil {
 			panic(err0)
 			klog.V(0).Infof("<<< err0 : %s >>>", err0)
@@ -730,21 +752,21 @@ func MonitorMetricCustom(LimitLoop []string){
 			panic(err1)
 			klog.V(0).Infof("<<< err1 : %s >>>", err1)
 		}
-		klog.V(0).Infof(" Metrics DEBUG 03")
+		klog.V(8).Infof(" Metrics DEBUG 03")
 		podMetrics, MetricError := mc.MetricsV1beta1().PodMetricses(metav1.NamespaceDefault).List(context.TODO(), metav1.ListOptions{})
 		if MetricError != nil {
-			klog.V(0).Infof("<<< MetricError >>>", MetricError)
+			klog.V(8).Infof("<<< MetricError >>>", MetricError)
 		}
-		klog.V(0).Infof(" Metrics DEBUG 04")
+		klog.V(8).Infof(" Metrics DEBUG 04")
 		//fmt.Println(" ---------------podMetrics.Items", podMetrics.Items)
 		//fmt.Println(" ---------------podMetrics", podMetrics)
 		/*podMetrics.Items Get all variable in package of MetricsV1beta1().PodMetricses*/
 		for _, podMetric := range podMetrics.Items {
-			klog.V(0).Infof(" Metrics DEBUG 05")
+			klog.V(8).Infof(" Metrics DEBUG 05")
 			containerMetrics := podMetric.Containers
-			klog.V(0).Infof("<<< containerMetrics-LEN >>>", len(containerMetrics))
+			klog.V(8).Infof("<<< containerMetrics-LEN >>>", len(containerMetrics))
 			MetricSource := podMetric.ObjectMeta
-			klog.V(0).Infof(" Metrics DEBUG 06")
+			klog.V(8).Infof(" Metrics DEBUG 06")
 			for _, containerMetric := range containerMetrics {
 				//containerCPUUsage := containerMetric.Usage.Cpu().String()
 				//containerRAMUsage := containerMetric.Usage.Memory().String()
@@ -752,23 +774,26 @@ func MonitorMetricCustom(LimitLoop []string){
 				containerCPUUsage_conveter := containerMetric.Usage.Cpu().MilliValue()
 				containerRAMUsage_conveter := (containerMetric.Usage.Memory().Value() / 1024 / 1024)
 				stupid_key := MetricSource.Name
-				klog.V(0).Infof(" Metrics DEBUG 07")
+				klog.V(8).Infof(" Metrics DEBUG 07")
 				//CPUMap[stupid_key] = (50 - containerCPUUsage_conveter)
 				//RAMMap[stupid_key] = (128 - containerRAMUsage_conveter)
+				MetricsLocker.Lock()
 				CPUMap[stupid_key] = containerCPUUsage_conveter
 				RAMMap[stupid_key] = containerRAMUsage_conveter
-				klog.V(0).Infof("<<< MetricSource-stupid_key >>>", stupid_key)
+				MetricsLocker.Unlock()
+				klog.V(8).Infof("<<< MetricSource-stupid_key >>>", stupid_key)
 				//klog.V(0).Infof("<<< Outside ofMetricSource-CPUMap >>>", CPUMap)
 				//klog.V(0).Infof("<<< Outside ofMetricSource-RAMMap >>>", RAMMap)
 				//klog.V(0).Infof("<<< +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ >>>")
 			}
 		}
 		//klog.V(0).Infof("<<< +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ >>>")
-		klog.V(0).Infof("<<< Outside ofMetricSource-CPUMap >>>", CPUMap)
-		klog.V(0).Infof("<<< Outside ofMetricSource-RAMMap >>>", RAMMap)
-		klog.V(0).Infof("<<< +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ >>>")
-		go PrintLogPerMinutes(LimitLoop, CPU, RAM, CPUMap, RAMMap, CPUEvalutionResult, RAMEvalutionResult, EvalutionOtherEndpoint, ScoreList, FinalScore, Printcheck)
-		time.Sleep(5 * time.Second)
-	}
+		//klog.V(8).Infof("<<< Outside ofMetricSource-CPUMap >>>", CPUMap)
+		//klog.V(8).Infof("<<< Outside ofMetricSource-RAMMap >>>", RAMMap)
+		//klog.V(8).Infof("<<< +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ >>>")
+		//go PrintLogPerMinutes(LimitLoop, CPU, RAM, CPUMap, RAMMap, CPUEvalutionResult, RAMEvalutionResult, EvalutionOtherEndpoint, ScoreList, FinalScore, Printcheck)
+		//time.Sleep(5 * time.Second)
+	//}
+	return CPUMap, RAMMap
 }
 
