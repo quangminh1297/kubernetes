@@ -99,7 +99,7 @@ func TryConnectEndpoints_V2(service proxy.ServicePortName, srcAddr net.Addr, pro
 			klog.Errorf("Couldn't find an endpoint for %s: %v", service, err)
 			return nil, err
 		}
-		klog.V(0).Infof("Mapped service %q to endpoint %s", service, endpoint)
+		klog.V(4).Infof("Mapped service %q to endpoint %s", service, endpoint)
 
 		// TODO: This could spin up a new goroutine to make the outbound connection,
 		// and keep accepting inbound traffic.
@@ -141,7 +141,7 @@ func (tcp *tcpProxySocket) ProxyLoop_V2(service proxy.ServicePortName, myInfo *S
 			klog.Errorf("Accept failed: %v", err)
 			continue
 		}
-		klog.V(0).Infof("Accepted TCP connection from %v to %v", inConn.RemoteAddr(), inConn.LocalAddr())
+		klog.V(4).Infof("Accepted TCP connection from %v to %v", inConn.RemoteAddr(), inConn.LocalAddr())
 		outConn, err := TryConnectEndpoints_V2(service, inConn.(*net.TCPConn).RemoteAddr(), "tcp", loadBalancer)
 
 		if err != nil {
@@ -282,7 +282,7 @@ func (udp *udpProxySocket) ProxyLoop_V2(service proxy.ServicePortName, myInfo *S
 		if err != nil {
 			if e, ok := err.(net.Error); ok {
 				if e.Temporary() {
-					klog.V(1).Infof("ReadFrom had a temporary failure: %v", err)
+					klog.V(4).Infof("ReadFrom had a temporary failure: %v", err)
 					continue
 				}
 			}

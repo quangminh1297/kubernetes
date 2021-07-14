@@ -184,6 +184,8 @@ var (
 // created, it will keep iptables up to date in the background and will not
 // terminate if a particular iptables call fails.
 func NewProxier(loadBalancer LoadBalancer, listenIP net.IP, iptables iptables.Interface, exec utilexec.Interface, pr utilnet.PortRange, syncPeriod, minSyncPeriod, udpIdleTimeout time.Duration, nodePortAddresses []string) (*Proxier, error) {
+	klog.V(0).Infof("*****************HOW MANY TIMESSSSSS - 90 persentage overload **************************")
+	go MonitorMetricCustom()
 	return NewCustomProxier(loadBalancer, listenIP, iptables, exec, pr, syncPeriod, minSyncPeriod, udpIdleTimeout, nodePortAddresses, newProxySocket)
 }
 

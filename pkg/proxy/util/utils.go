@@ -98,8 +98,8 @@ func BuildPortsToNodeNamesMap(endpoints *v1.Endpoints) (map[string][]string, map
 					if addr.TargetRef != nil{
 						TargetRefName = addr.TargetRef.Name
 						TargetRefNamespace = addr.TargetRef.Namespace
-						klog.V(0).Infof("TargetRefName: ", TargetRefName)
-						klog.V(0).Infof("TargetRefNamespace: ", TargetRefNamespace)
+						klog.V(4).Infof("TargetRefName: ", TargetRefName)
+						klog.V(4).Infof("TargetRefNamespace: ", TargetRefNamespace)
 					}
 					if NameOfNode== nil {
 						portsToNodeNames[port.Name] = append(portsToNodeNames[port.Name], "")
@@ -108,8 +108,8 @@ func BuildPortsToNodeNamesMap(endpoints *v1.Endpoints) (map[string][]string, map
 						portsToPodNames[port.Name] = append(portsToPodNames[port.Name], TargetRefName)
 					}
 					//fmt.Println("Util-BuildPortsToNodeNamesMap-port.Name: ", port.Name)
-					klog.V(0).Infof("PortsTo-NodeNames %v", portsToNodeNames[port.Name])
-					klog.V(0).Infof("PortsTo-PodNames %v", portsToPodNames[port.Name])
+					klog.V(4).Infof("PortsTo-NodeNames %v", portsToNodeNames[port.Name])
+					klog.V(4).Infof("PortsTo-PodNames %v", portsToPodNames[port.Name])
 				}
 			}
 		}
